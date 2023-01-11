@@ -45,18 +45,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "confy"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e37668cb35145dcfaa1931a5f37fde375eeae8068b4c0d2f289da28a270b2d2c"
-dependencies = [
- "directories",
- "serde",
- "thiserror",
- "toml",
-]
-
-[[package]]
 name = "core-foundation"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -76,10 +64,11 @@ checksum = "5827cebf4670468b8772dd191856768aedcb1b0278a04f989f7766351917b9dc"
 name = "ddns_cloudflare"
 version = "0.1.0"
 dependencies = [
- "confy",
+ "directories",
  "reqwest",
  "serde",
  "tokio",
+ "toml",
 ]
 
 [[package]]
