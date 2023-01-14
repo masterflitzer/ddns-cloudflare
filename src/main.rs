@@ -1,10 +1,20 @@
-mod config;
-mod structs;
+pub(crate) mod config;
+pub(crate) mod structs;
 
 use clap::Parser;
-use reqwest::Client as HttpClient;
-use std::{net::Ipv4Addr, process::exit};
-use structs::{Args, Ipify};
+use reqwest::{Client as HttpClient, Response, Url};
+use serde::de::DeserializeOwned;
+use std::{
+    error::Error, io::Error as IOError, io::ErrorKind, net::Ipv4Addr, process::exit,
+    result::Result as StdResult,
+};
+use structs::{
+    cloudflare::response::{ListDnsRecords, ListZone},
+    cloudflare::{Cloudflare, CloudflareResultHashMap, CloudflareResultVector, RecordType},
+    Args, Ipify, RecordIds,
+};
+
+type Result<T> = StdResult<T, Box<dyn Error>>;
 
 #[tokio::main]
 async fn main() {
@@ -28,39 +38,65 @@ async fn main() {
 
     let config = match config::get(config_path) {
         Ok(x) => x,
-        Err(_) => {
-            println!("An error occurred while parsing the configuration.\nPlease consult the readme for an example configuration.");
+        Err(e) => {
+            println!("An error occurred while parsing the configuration.\nPlease consult the readme for an example configuration.\n\n{}", e);
             exit(1)
         }
     };
-    println!("api token: \t\"{}\"", config.api_token);
-    println!("zone name: \t\"{}\"", config.zones[0].name);
-    println!("zone record: \t\"{}\"", config.zones[0].records[1]);
 
     let http: HttpClient = HttpClient::new();
+    let api_base: Url = Url::parse("https://api.cloudflare.com/client/v4/").unwrap();
 
-    let ipv4: Ipv4Addr = determine_ipv4(http).await.unwrap();
+    let ipv4: Ipv4Addr = determine_ipv4(&http).await.unwrap();
+
+    let api_zones = api_base.join("zones").unwrap();
+    for zone in config.zones {
+        let response = api_get(&http, &api_zones, &config.api_token).await.unwrap();
+
+        let data = match deserialize_response::<CloudflareResultVector<ListZone>>(
+            response, &zone.name, "zone",
+        )
+        .await
+        {
+            Some(x) => x,
+            None => continue,
+        };
+
+        let zone_id = match obtain_zone_id(data, &zone.name).await {
+            Some(x) => x,
+            None => continue,
+        };
+
+        let api_records = api_base
+            .join(format!("zones/{}/dns_records", zone_id).as_str())
+            .unwrap();
+
+        for record in zone.records {
+            let response = api_get(&http, &api_records, &config.api_token)
+                .await
+                .unwrap();
+
+            let data = match deserialize_response::<CloudflareResultVector<ListDnsRecords>>(
+                response, &record, "record",
+            )
+            .await
+            {
+                Some(x) => x,
+                None => continue,
+            };
+
+            let record_id =
+                match obtain_record_ids(data, format!("{}.{}", record, zone.name).as_str()).await {
+                    Some(x) => x,
+                    None => continue,
+                };
+        }
+    }
+
     println!("ip: {}", ipv4);
 }
 
-async fn obtain_zone_id(http: HttpClient, zone_name: String) -> Result<String, reqwest::Error> {
-    todo!()
-}
-
-async fn obtain_record_id(
-    http: HttpClient,
-    zone_id: String,
-    zone_name: String,
-    record_name: String,
-) -> Result<String, reqwest::Error> {
-    todo!()
-}
-
-async fn update_ip(http: HttpClient) {
-    todo!()
-}
-
-async fn determine_ipv4(http: HttpClient) -> Result<Ipv4Addr, reqwest::Error> {
+async fn determine_ipv4(http: &HttpClient) -> Result<Ipv4Addr> {
     let response = http
         .get("https://api.ipify.org?format=json")
         .send()
@@ -74,3 +110,73 @@ async fn determine_ipv4(http: HttpClient) -> Result<Ipv4Addr, reqwest::Error> {
 async fn determine_ipv6() {
     todo!()
 }
+
+async fn api_get(http: &HttpClient, url: &Url, api_token: &String) -> Result<Response> {
+    let response = http
+        .get(url.to_owned())
+        .bearer_auth(api_token)
+        .send()
+        .await?;
+    Ok(response)
+}
+
+async fn deserialize_response<T>(response: Response, name: &str, type_: &str) -> Option<T>
+where
+    T: DeserializeOwned,
+{
+    if !is_http_success(&response) {
+        println!(
+            "{}: Skipping {} because HTTP status code was not between 200-299",
+            name, type_
+        );
+        return None;
+    }
+
+    let data = response.json::<Cloudflare>().await.ok()?;
+
+    if !data.success {
+        println!(
+            "{}: Skipping {} because JSON payload did not contain {{ \"success\": true }}",
+            name, type_
+        );
+        return None;
+    }
+
+    let result: T = serde_json::from_value(data.result).ok()?;
+
+    Some(result)
+}
+
+async fn obtain_zone_id(data: CloudflareResultVector<ListZone>, zone_name: &str) -> Option<String> {
+    let zone = &data.result.into_iter().find(|x| x.name == zone_name)?;
+    Some(zone.id.to_owned())
+}
+
+async fn obtain_record_ids(
+    data: CloudflareResultVector<ListDnsRecords>,
+    record_name: &str,
+) -> Option<RecordIds> {
+    let records = &data.result.into_iter().filter(|x| x.name == record_name);
+
+    let record_ids: RecordIds;
+    record_ids.V4 = records
+        .filter(|x| matches!(x.type_, RecordType::A))
+        .collect();
+    record_ids.V6 = records
+        .filter(|x| matches!(x.type_, RecordType::Aaaa))
+        .collect();
+
+    Some(records)
+}
+
+async fn update_ip(response: Response, zone_id: &str, record_id: &str) {
+    todo!()
+}
+
+fn is_http_success(response: &Response) -> bool {
+    response.status().is_success()
+}
+
+// fn create_generic_error() -> IOError {
+//     IOError::from(ErrorKind::Other)
+// }
