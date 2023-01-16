@@ -22,6 +22,6 @@ pub(crate) struct Ipify {
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct RecordIds {
-    pub V4: Vec<String>,
-    pub V6: Vec<String>,
+    pub v4: Vec<String>,
+    pub v6: Vec<String>,
 }

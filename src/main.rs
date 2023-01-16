@@ -6,7 +6,7 @@ use reqwest::{Client as HttpClient, Response, Url};
 use serde::de::DeserializeOwned;
 use std::{
     error::Error, io::Error as IOError, io::ErrorKind, net::Ipv4Addr, process::exit,
-    result::Result as StdResult,
+    result::Result as StdResult, vec,
 };
 use structs::{
     cloudflare::response::{ListDnsRecords, ListZone},
@@ -148,25 +148,34 @@ where
 }
 
 async fn obtain_zone_id(data: CloudflareResultVector<ListZone>, zone_name: &str) -> Option<String> {
-    let zone = &data.result.into_iter().find(|x| x.name == zone_name)?;
-    Some(zone.id.to_owned())
+    let zone = data.result.into_iter().find(|x| x.name == zone_name)?;
+    Some(zone.id)
 }
 
 async fn obtain_record_ids(
     data: CloudflareResultVector<ListDnsRecords>,
     record_name: &str,
 ) -> Option<RecordIds> {
-    let records = &data.result.into_iter().filter(|x| x.name == record_name);
+    let records_filter = data.result.into_iter().filter(|x| x.name == record_name);
+    let records_filter_v4 = records_filter.clone();
+    let records_filter_v6 = records_filter;
 
-    let record_ids: RecordIds;
-    record_ids.V4 = records
+    let record_ids_v4 = records_filter_v4
         .filter(|x| matches!(x.type_, RecordType::A))
-        .collect();
-    record_ids.V6 = records
-        .filter(|x| matches!(x.type_, RecordType::Aaaa))
-        .collect();
+        .map(|x| x.id)
+        .collect::<Vec<_>>();
 
-    Some(records)
+    let record_ids_v6 = records_filter_v6
+        .filter(|x| matches!(x.type_, RecordType::Aaaa))
+        .map(|x| x.id)
+        .collect::<Vec<_>>();
+
+    let record_ids = RecordIds {
+        v4: record_ids_v4,
+        v6: record_ids_v6,
+    };
+
+    Some(record_ids)
 }
 
 async fn update_ip(response: Response, zone_id: &str, record_id: &str) {

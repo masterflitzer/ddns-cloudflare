@@ -5,7 +5,6 @@ use std::collections::HashMap;
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Cloudflare {
     pub success: bool,
-    #[serde(flatten)]
     pub result: Json,
 }
 
@@ -19,7 +18,7 @@ pub(crate) struct CloudflareResultHashMap<T> {
     pub result: HashMap<String, T>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub(crate) enum RecordType {
     A,
@@ -30,7 +29,7 @@ pub(crate) mod request {
     use serde::{Deserialize, Serialize};
     use std::net::IpAddr;
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Clone, Serialize, Deserialize)]
     pub(crate) struct PatchDnsRecord {
         pub comment: String,
         pub content: IpAddr,
@@ -45,13 +44,13 @@ pub(crate) mod response {
     use crate::structs::cloudflare::RecordType;
     use serde::{Deserialize, Serialize};
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Clone, Serialize, Deserialize)]
     pub(crate) struct ListZone {
         pub id: String,
         pub name: String,
     }
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Clone, Serialize, Deserialize)]
     pub(crate) struct ListDnsRecords {
         pub id: String,
         pub name: String,
