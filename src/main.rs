@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 use std::{net::Ipv4Addr, process::exit};
 use structs::{
     cloudflare::response::{ListDnsRecords, ListZone},
-    cloudflare::{Cloudflare, RecordType},
+    cloudflare::Cloudflare,
     Args, Ipify, RecordIds,
 };
 
@@ -72,13 +72,7 @@ async fn main() {
             }
         };
 
-        let data = match deserialize_response::<Vec<ListZone>>(
-            response,
-            zone.name.clone(),
-            String::from("zone"),
-        )
-        .await
-        {
+        let data = match deserialize_response::<Vec<ListZone>>(response, zone.name.clone()).await {
             Ok(x) => x,
             Err(e) => {
                 handle_errors(&e);
@@ -108,32 +102,23 @@ async fn main() {
                 }
             };
 
-            let data = match deserialize_response::<Vec<ListDnsRecords>>(
-                response,
-                record.clone(),
-                String::from("record"),
-            )
-            .await
-            {
-                Ok(x) => x,
-                Err(e) => {
-                    handle_errors(&e);
-                    match e {
-                        ErrorKind::NoSuccessHttp { name: _, type_: _ }
-                        | ErrorKind::NoSuccessJson { name: _, type_: _ } => continue,
-                        _ => exit(1),
+            let data =
+                match deserialize_response::<Vec<ListDnsRecords>>(response, record.clone()).await {
+                    Ok(x) => x,
+                    Err(e) => {
+                        handle_errors(&e);
+                        match e {
+                            ErrorKind::NoSuccessHttp(_) | ErrorKind::NoSuccessJson(_) => continue,
+                            _ => exit(1),
+                        }
                     }
-                }
-            };
+                };
 
             let record_id =
                 match obtain_record_ids(data, format!("{}.{}", record, zone.name).as_str()).await {
                     Some(x) => x,
                     None => continue,
                 };
-            dbg!(&record_id);
-            dbg!(&record_id.v4);
-            dbg!(&record_id.v6);
         }
     }
 }
@@ -165,16 +150,12 @@ async fn api_get(
     Ok(response)
 }
 
-async fn deserialize_response<T>(
-    response: Response,
-    name: String,
-    type_: String,
-) -> Result<T, ErrorKind>
+async fn deserialize_response<T>(response: Response, name: String) -> Result<T, ErrorKind>
 where
     T: DeserializeOwned,
 {
     if !is_http_success(&response) {
-        return Err(ErrorKind::NoSuccessHttp { name, type_ });
+        return Err(ErrorKind::NoSuccessHttp(name));
     }
 
     let data = response
@@ -183,10 +164,11 @@ where
         .map_err(|_| ErrorKind::JsonDeserialize)?;
 
     if !data.success {
-        return Err(ErrorKind::NoSuccessJson { name, type_ });
+        return Err(ErrorKind::NoSuccessJson(name));
     }
 
-    let result: T = serde_json::from_value(data.result).map_err(|_| ErrorKind::JsonDeserialize)?;
+    let result =
+        serde_json::from_value::<T>(data.result).map_err(|_| ErrorKind::JsonDeserialize)?;
 
     Ok(result)
 }
@@ -202,12 +184,12 @@ async fn obtain_record_ids(data: Vec<ListDnsRecords>, record_name: &str) -> Opti
     let records_filter_v6 = records_filter;
 
     let record_ids_v4 = records_filter_v4
-        .filter(|x| matches!(x.type_, RecordType::A))
+        .filter(|x| x.type_.to_uppercase() == "A")
         .map(|x| x.id)
         .collect::<Vec<_>>();
 
     let record_ids_v6 = records_filter_v6
-        .filter(|x| matches!(x.type_, RecordType::Aaaa))
+        .filter(|x| x.type_.to_uppercase() == "AAAA")
         .map(|x| x.id)
         .collect::<Vec<_>>();
 

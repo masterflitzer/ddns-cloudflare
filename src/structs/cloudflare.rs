@@ -7,13 +7,6 @@ pub(crate) struct Cloudflare {
     pub result: Json,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "UPPERCASE")]
-pub(crate) enum RecordType {
-    A,
-    Aaaa,
-}
-
 pub(crate) mod request {
     use serde::{Deserialize, Serialize};
     use std::net::IpAddr;
@@ -30,7 +23,6 @@ pub(crate) mod request {
 }
 
 pub(crate) mod response {
-    use crate::structs::cloudflare::RecordType;
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,10 +33,13 @@ pub(crate) mod response {
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub(crate) struct ListDnsRecords {
+        pub content: String,
         pub id: String,
         pub name: String,
+        pub proxied: bool,
+        pub ttl: u32,
         #[serde(rename = "type")]
-        pub type_: RecordType,
+        pub type_: String,
         pub zone_id: String,
         pub zone_name: String,
     }
