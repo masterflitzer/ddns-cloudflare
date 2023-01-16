@@ -7,39 +7,14 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'ddns_cloudflare'",
+            "name": "Debug",
             "cargo": {
                 "args": [
-                    "build",
-                    "--bin=ddns_cloudflare",
-                    "--package=ddns_cloudflare"
-                ],
-                "filter": {
-                    "name": "ddns_cloudflare",
-                    "kind": "bin"
-                }
+                    "build"
+                ]
             },
             "args": [],
             "cwd": "${workspaceFolder}"
         },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug unit tests in executable 'ddns_cloudflare'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--bin=ddns_cloudflare",
-                    "--package=ddns_cloudflare"
-                ],
-                "filter": {
-                    "name": "ddns_cloudflare",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        }
     ]
 }
