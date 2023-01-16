@@ -1,20 +1,17 @@
 pub(crate) mod config;
+pub(crate) mod errors;
 pub(crate) mod structs;
 
 use clap::Parser;
+use errors::{handle_errors, ErrorKind};
 use reqwest::{Client as HttpClient, Response, Url};
 use serde::de::DeserializeOwned;
-use std::{
-    error::Error, io::Error as IOError, io::ErrorKind, net::Ipv4Addr, process::exit,
-    result::Result as StdResult, vec,
-};
+use std::{net::Ipv4Addr, process::exit};
 use structs::{
     cloudflare::response::{ListDnsRecords, ListZone},
-    cloudflare::{Cloudflare, CloudflareResultHashMap, CloudflareResultVector, RecordType},
+    cloudflare::{Cloudflare, RecordType},
     Args, Ipify, RecordIds,
 };
-
-type Result<T> = StdResult<T, Box<dyn Error>>;
 
 #[tokio::main]
 async fn main() {
@@ -25,8 +22,8 @@ async fn main() {
         None => match config::path() {
             Ok(x) => x,
             Err(e) => {
-                println!("An unexpected error occurred while trying to get the path of the configuration file.\n\n{}", e);
-                exit(1)
+                handle_errors(&ErrorKind::ConfigPath(e));
+                exit(1);
             }
         },
     };
@@ -39,28 +36,54 @@ async fn main() {
     let config = match config::get(config_path) {
         Ok(x) => x,
         Err(e) => {
-            println!("An error occurred while parsing the configuration.\nPlease consult the readme for an example configuration.\n\n{}", e);
+            handle_errors(&ErrorKind::Config(e));
             exit(1)
         }
     };
 
     let http: HttpClient = HttpClient::new();
-    let api_base: Url = Url::parse("https://api.cloudflare.com/client/v4/").unwrap();
+    let api_base: Url = match Url::parse("https://api.cloudflare.com/client/v4/") {
+        Ok(x) => x,
+        Err(e) => {
+            handle_errors(&ErrorKind::Unknown(Box::new(e)));
+            exit(1)
+        }
+    };
 
-    let ipv4: Ipv4Addr = determine_ipv4(&http).await.unwrap();
-    println!("ip: {}", ipv4);
+    let ipv4: Option<Ipv4Addr> = determine_ipv4(&http).await.ok();
+    if let None = ipv4 {
+        handle_errors(&ErrorKind::IPv4);
+    }
 
-    let api_zones = api_base.join("zones").unwrap();
+    let api_zones = match api_base.join("zones") {
+        Ok(x) => x,
+        Err(e) => {
+            handle_errors(&ErrorKind::Unknown(Box::new(e)));
+            exit(1)
+        }
+    };
+
     for zone in config.zones {
-        let response = api_get(&http, &api_zones, &config.api_token).await.unwrap();
+        let response = match api_get(&http, &api_zones, &config.api_token).await {
+            Ok(x) => x,
+            Err(_) => {
+                handle_errors(&ErrorKind::API);
+                exit(1);
+            }
+        };
 
-        let data = match deserialize_response::<CloudflareResultVector<ListZone>>(
-            response, &zone.name, "zone",
+        let data = match deserialize_response::<Vec<ListZone>>(
+            response,
+            zone.name.clone(),
+            String::from("zone"),
         )
         .await
         {
-            Some(x) => x,
-            None => continue,
+            Ok(x) => x,
+            Err(e) => {
+                handle_errors(&e);
+                continue;
+            }
         };
 
         let zone_id = match obtain_zone_id(data, &zone.name).await {
@@ -68,22 +91,39 @@ async fn main() {
             None => continue,
         };
 
-        let api_records = api_base
-            .join(format!("zones/{}/dns_records", zone_id).as_str())
-            .unwrap();
+        let api_records = match api_base.join(format!("zones/{}/dns_records", zone_id).as_str()) {
+            Ok(x) => x,
+            Err(e) => {
+                handle_errors(&ErrorKind::Unknown(Box::new(e)));
+                exit(1)
+            }
+        };
 
         for record in zone.records {
-            let response = api_get(&http, &api_records, &config.api_token)
-                .await
-                .unwrap();
+            let response = match api_get(&http, &api_records, &config.api_token).await {
+                Ok(x) => x,
+                Err(_) => {
+                    handle_errors(&ErrorKind::API);
+                    exit(1);
+                }
+            };
 
-            let data = match deserialize_response::<CloudflareResultVector<ListDnsRecords>>(
-                response, &record, "record",
+            let data = match deserialize_response::<Vec<ListDnsRecords>>(
+                response,
+                record.clone(),
+                String::from("record"),
             )
             .await
             {
-                Some(x) => x,
-                None => continue,
+                Ok(x) => x,
+                Err(e) => {
+                    handle_errors(&e);
+                    match e {
+                        ErrorKind::NoSuccessHttp { name: _, type_: _ }
+                        | ErrorKind::NoSuccessJson { name: _, type_: _ } => continue,
+                        _ => exit(1),
+                    }
+                }
             };
 
             let record_id =
@@ -91,20 +131,20 @@ async fn main() {
                     Some(x) => x,
                     None => continue,
                 };
-
-            println!("{:?}", record_id);
+            dbg!(&record_id);
+            dbg!(&record_id.v4);
+            dbg!(&record_id.v6);
         }
     }
 }
 
-async fn determine_ipv4(http: &HttpClient) -> Result<Ipv4Addr> {
+async fn determine_ipv4(http: &HttpClient) -> Result<Ipv4Addr, reqwest::Error> {
     let response = http
         .get("https://api.ipify.org?format=json")
         .send()
         .await?
         .json::<Ipify>()
         .await?;
-
     Ok(response.ip)
 }
 
@@ -112,7 +152,11 @@ async fn determine_ipv6() {
     todo!()
 }
 
-async fn api_get(http: &HttpClient, url: &Url, api_token: &String) -> Result<Response> {
+async fn api_get(
+    http: &HttpClient,
+    url: &Url,
+    api_token: &String,
+) -> Result<Response, reqwest::Error> {
     let response = http
         .get(url.to_owned())
         .bearer_auth(api_token)
@@ -121,43 +165,39 @@ async fn api_get(http: &HttpClient, url: &Url, api_token: &String) -> Result<Res
     Ok(response)
 }
 
-async fn deserialize_response<T>(response: Response, name: &str, type_: &str) -> Option<T>
+async fn deserialize_response<T>(
+    response: Response,
+    name: String,
+    type_: String,
+) -> Result<T, ErrorKind>
 where
     T: DeserializeOwned,
 {
     if !is_http_success(&response) {
-        println!(
-            "{}: Skipping {} because HTTP status code was not between 200-299",
-            name, type_
-        );
-        return None;
+        return Err(ErrorKind::NoSuccessHttp { name, type_ });
     }
 
-    let data = response.json::<Cloudflare>().await.ok()?;
+    let data = response
+        .json::<Cloudflare>()
+        .await
+        .map_err(|_| ErrorKind::JsonDeserialize)?;
 
     if !data.success {
-        println!(
-            "{}: Skipping {} because JSON payload did not contain {{ \"success\": true }}",
-            name, type_
-        );
-        return None;
+        return Err(ErrorKind::NoSuccessJson { name, type_ });
     }
 
-    let result: T = serde_json::from_value(data.result).ok()?;
+    let result: T = serde_json::from_value(data.result).map_err(|_| ErrorKind::JsonDeserialize)?;
 
-    Some(result)
+    Ok(result)
 }
 
-async fn obtain_zone_id(data: CloudflareResultVector<ListZone>, zone_name: &str) -> Option<String> {
-    let zone = data.result.into_iter().find(|x| x.name == zone_name)?;
+async fn obtain_zone_id(data: Vec<ListZone>, zone_name: &str) -> Option<String> {
+    let zone = data.into_iter().find(|x| x.name == zone_name)?;
     Some(zone.id)
 }
 
-async fn obtain_record_ids(
-    data: CloudflareResultVector<ListDnsRecords>,
-    record_name: &str,
-) -> Option<RecordIds> {
-    let records_filter = data.result.into_iter().filter(|x| x.name == record_name);
+async fn obtain_record_ids(data: Vec<ListDnsRecords>, record_name: &str) -> Option<RecordIds> {
+    let records_filter = data.into_iter().filter(|x| x.name == record_name);
     let records_filter_v4 = records_filter.clone();
     let records_filter_v6 = records_filter;
 
@@ -186,7 +226,3 @@ async fn update_ip(response: Response, zone_id: &str, record_id: &str) {
 fn is_http_success(response: &Response) -> bool {
     response.status().is_success()
 }
-
-// fn create_generic_error() -> IOError {
-//     IOError::from(ErrorKind::Other)
-// }

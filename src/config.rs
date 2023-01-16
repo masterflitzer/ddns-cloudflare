@@ -2,7 +2,7 @@ use crate::structs::config::Config;
 use directories::ProjectDirs;
 use std::{
     fs::File,
-    io::{Error, ErrorKind, Read},
+    io::{Error as IOError, ErrorKind, Read},
     path::{Path, PathBuf},
 };
 
@@ -10,11 +10,11 @@ fn cargo_name() -> String {
     env!("CARGO_PKG_NAME").replace('_', "-")
 }
 
-pub(crate) fn path() -> Result<PathBuf, Error> {
+pub(crate) fn path() -> Result<PathBuf, IOError> {
     let name = cargo_name();
 
     let project_dirs =
-        ProjectDirs::from("", "", &name).ok_or_else(|| Error::from(ErrorKind::NotFound))?;
+        ProjectDirs::from("", "", &name).ok_or_else(|| IOError::from(ErrorKind::NotFound))?;
     let config_dir = ProjectDirs::config_dir(&project_dirs);
 
     let mut path = PathBuf::from(config_dir);
@@ -22,11 +22,11 @@ pub(crate) fn path() -> Result<PathBuf, Error> {
     Ok(path)
 }
 
-pub(crate) fn get(path: impl AsRef<Path>) -> Result<Config, Error> {
+pub(crate) fn get(path: impl AsRef<Path>) -> Result<Config, IOError> {
     std::fs::create_dir_all(
         path.as_ref()
             .parent()
-            .ok_or_else(|| Error::from(ErrorKind::NotFound))?,
+            .ok_or_else(|| IOError::from(ErrorKind::NotFound))?,
     )?;
 
     let mut file = File::options()

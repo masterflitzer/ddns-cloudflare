@@ -1,21 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
-use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Cloudflare {
     pub success: bool,
     pub result: Json,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct CloudflareResultVector<T> {
-    pub result: Vec<T>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct CloudflareResultHashMap<T> {
-    pub result: HashMap<String, T>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
