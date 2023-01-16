@@ -15,12 +15,12 @@ pub(crate) struct Args {
     pub configuration: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Ipify {
     pub ip: Ipv4Addr,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct RecordIds {
     pub v4: Vec<String>,
     pub v6: Vec<String>,
