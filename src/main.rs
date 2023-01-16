@@ -48,6 +48,7 @@ async fn main() {
     let api_base: Url = Url::parse("https://api.cloudflare.com/client/v4/").unwrap();
 
     let ipv4: Ipv4Addr = determine_ipv4(&http).await.unwrap();
+    println!("ip: {}", ipv4);
 
     let api_zones = api_base.join("zones").unwrap();
     for zone in config.zones {
@@ -90,10 +91,10 @@ async fn main() {
                     Some(x) => x,
                     None => continue,
                 };
+
+            println!("{:?}", record_id);
         }
     }
-
-    println!("ip: {}", ipv4);
 }
 
 async fn determine_ipv4(http: &HttpClient) -> Result<Ipv4Addr> {
