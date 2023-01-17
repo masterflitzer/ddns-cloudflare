@@ -6,6 +6,7 @@ use clap::Parser;
 use errors::{handle_errors, ErrorKind};
 use reqwest::{Client as HttpClient, Response, Url};
 use serde::de::DeserializeOwned;
+use serde_json::Value as Json;
 use std::{net::Ipv4Addr, process::exit};
 use structs::{
     cloudflare::response::{ListDnsRecords, ListZone},
@@ -55,7 +56,7 @@ async fn main() {
         handle_errors(&ErrorKind::IPv4);
     }
 
-    let api_zones = match api_base.join("zones") {
+    let url_list_zones = match api_base.join("zones") {
         Ok(x) => x,
         Err(e) => {
             handle_errors(&ErrorKind::Unknown(Box::new(e)));
@@ -63,8 +64,52 @@ async fn main() {
         }
     };
 
+    let response_zones = match api_get(&http, url_list_zones, &config.api_token).await {
+        Ok(x) => x,
+        Err(_) => {
+            handle_errors(&ErrorKind::API);
+            exit(1);
+        }
+    };
+
+    let json_zones = match deserialize_response(response_zones).await {
+        Ok(x) => x,
+        Err(e) => {
+            handle_errors(&e);
+            exit(1);
+        }
+    };
+
+    let data_zones = match deserialize_json_value::<Vec<ListZone>>(json_zones.result).await {
+        Ok(x) => x,
+        Err(e) => {
+            handle_errors(&e);
+            exit(1);
+        }
+    };
+
     for zone in config.zones {
-        let response = match api_get(&http, &api_zones, &config.api_token).await {
+        let zone_id = match obtain_zone_id(&data_zones, &zone.name).await {
+            Some(x) => x,
+            None => {
+                println!(
+                    "{}: Skipping this zone because the corresponding zone id could not be found",
+                    &zone.name
+                );
+                continue;
+            }
+        };
+
+        let url_list_dns_records =
+            match api_base.join(format!("zones/{}/dns_records", zone_id).as_str()) {
+                Ok(x) => x,
+                Err(e) => {
+                    handle_errors(&ErrorKind::Unknown(Box::new(e)));
+                    exit(1)
+                }
+            };
+
+        let response_records = match api_get(&http, url_list_dns_records, &config.api_token).await {
             Ok(x) => x,
             Err(_) => {
                 handle_errors(&ErrorKind::API);
@@ -72,52 +117,50 @@ async fn main() {
             }
         };
 
-        let data = match deserialize_response::<Vec<ListZone>>(response, zone.name.clone()).await {
+        let json_records = match deserialize_response(response_records).await {
             Ok(x) => x,
             Err(e) => {
                 handle_errors(&e);
-                continue;
+                match e {
+                    ErrorKind::NoSuccessHttp | ErrorKind::NoSuccessJson => continue,
+                    _ => exit(1),
+                }
             }
         };
 
-        let zone_id = match obtain_zone_id(data, &zone.name).await {
-            Some(x) => x,
-            None => continue,
-        };
-
-        let api_records = match api_base.join(format!("zones/{}/dns_records", zone_id).as_str()) {
-            Ok(x) => x,
-            Err(e) => {
-                handle_errors(&ErrorKind::Unknown(Box::new(e)));
-                exit(1)
-            }
-        };
-
-        for record in zone.records {
-            let response = match api_get(&http, &api_records, &config.api_token).await {
+        let data_records =
+            match deserialize_json_value::<Vec<ListDnsRecords>>(json_records.result).await {
                 Ok(x) => x,
-                Err(_) => {
-                    handle_errors(&ErrorKind::API);
+                Err(e) => {
+                    handle_errors(&e);
                     exit(1);
                 }
             };
 
-            let data =
-                match deserialize_response::<Vec<ListDnsRecords>>(response, record.clone()).await {
+        for record in zone.records {
+            let record_id = match obtain_record_ids(
+                &data_records,
+                format!("{}.{}", record, zone.name).as_str(),
+            )
+            .await
+            {
+                Some(x) => x,
+                None => {
+                    println!(
+                    "{}: Skipping this record because the corresponding record id could not be found",
+                    &record
+                );
+                    continue;
+                }
+            };
+
+            let url_patch_dns_records =
+                match api_base.join(format!("zones/{}/dns_records", zone_id).as_str()) {
                     Ok(x) => x,
                     Err(e) => {
-                        handle_errors(&e);
-                        match e {
-                            ErrorKind::NoSuccessHttp(_) | ErrorKind::NoSuccessJson(_) => continue,
-                            _ => exit(1),
-                        }
+                        handle_errors(&ErrorKind::Unknown(Box::new(e)));
+                        exit(1)
                     }
-                };
-
-            let record_id =
-                match obtain_record_ids(data, format!("{}.{}", record, zone.name).as_str()).await {
-                    Some(x) => x,
-                    None => continue,
                 };
         }
     }
@@ -139,47 +182,61 @@ async fn determine_ipv6() {
 
 async fn api_get(
     http: &HttpClient,
-    url: &Url,
-    api_token: &String,
+    url: Url,
+    api_token: impl AsRef<str>,
+) -> Result<Response, reqwest::Error> {
+    let response = http.get(url).bearer_auth(api_token.as_ref()).send().await?;
+    Ok(response)
+}
+
+async fn api_patch(
+    http: &HttpClient,
+    url: Url,
+    api_token: impl AsRef<str>,
 ) -> Result<Response, reqwest::Error> {
     let response = http
-        .get(url.to_owned())
-        .bearer_auth(api_token)
+        .patch(url)
+        .bearer_auth(api_token.as_ref())
         .send()
         .await?;
     Ok(response)
 }
 
-async fn deserialize_response<T>(response: Response, name: String) -> Result<T, ErrorKind>
-where
-    T: DeserializeOwned,
-{
+async fn deserialize_response(response: Response) -> Result<Cloudflare, ErrorKind> {
     if !is_http_success(&response) {
-        return Err(ErrorKind::NoSuccessHttp(name));
+        return Err(ErrorKind::NoSuccessHttp);
     }
 
     let data = response
         .json::<Cloudflare>()
         .await
-        .map_err(|_| ErrorKind::JsonDeserialize)?;
+        .map_err(|_| ErrorKind::Json)?;
 
     if !data.success {
-        return Err(ErrorKind::NoSuccessJson(name));
+        return Err(ErrorKind::NoSuccessJson);
     }
 
-    let result =
-        serde_json::from_value::<T>(data.result).map_err(|_| ErrorKind::JsonDeserialize)?;
+    Ok(data)
+}
 
+async fn deserialize_json_value<T: DeserializeOwned>(data: Json) -> Result<T, ErrorKind> {
+    let result = serde_json::from_value::<T>(data).map_err(|_| ErrorKind::Json)?;
     Ok(result)
 }
 
-async fn obtain_zone_id(data: Vec<ListZone>, zone_name: &str) -> Option<String> {
-    let zone = data.into_iter().find(|x| x.name == zone_name)?;
-    Some(zone.id)
+async fn obtain_zone_id(data: &Vec<ListZone>, zone_name: impl AsRef<str>) -> Option<String> {
+    let zone = data.into_iter().find(|x| x.name == zone_name.as_ref())?;
+    Some(zone.id.to_owned())
 }
 
-async fn obtain_record_ids(data: Vec<ListDnsRecords>, record_name: &str) -> Option<RecordIds> {
-    let records_filter = data.into_iter().filter(|x| x.name == record_name);
+async fn obtain_record_ids(
+    data: &Vec<ListDnsRecords>,
+    record_name: impl AsRef<str>,
+) -> Option<RecordIds> {
+    let records_filter = data
+        .to_owned()
+        .into_iter()
+        .filter(|x| x.name == record_name.as_ref());
     let records_filter_v4 = records_filter.clone();
     let records_filter_v6 = records_filter;
 
@@ -201,7 +258,7 @@ async fn obtain_record_ids(data: Vec<ListDnsRecords>, record_name: &str) -> Opti
     Some(record_ids)
 }
 
-async fn update_ip(response: Response, zone_id: &str, record_id: &str) {
+async fn update_ip(response: Response, zone_id: impl AsRef<str>, record_id: impl AsRef<str>) {
     todo!()
 }
 

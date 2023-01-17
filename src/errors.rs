@@ -2,15 +2,14 @@ use std::{error::Error, io::Error as IOError};
 
 #[derive(Debug)]
 pub(crate) enum ErrorKind {
+    API,
     Config(IOError),
     ConfigPath(IOError),
     IPv4,
     IPv6,
-    JsonDeserialize,
-    JsonSerialize,
-    NoSuccessHttp(String),
-    NoSuccessJson(String),
-    API,
+    Json,
+    NoSuccessHttp,
+    NoSuccessJson,
     Unknown(Box<dyn Error>),
 }
 
@@ -21,15 +20,12 @@ pub(crate) fn handle_errors(kind: &ErrorKind) {
         ErrorKind::ConfigPath(e) => println!("An error occurred while trying to get the path to the configuration file.\n{}", e),
         ErrorKind::IPv4 => println!("An error occurred while trying to determine the IPv4 address"),
         ErrorKind::IPv6 => println!("An error occurred while trying to determine the IPv6 address"),
-        ErrorKind::JsonDeserialize => println!("An error occurred while deserializing JSON"),
-        ErrorKind::JsonSerialize => println!("An error occurred while serializing JSON"),
-        ErrorKind::NoSuccessHttp(name) => println!(
-            "{}: Skipping record/zone because HTTP status code was not between 200-299",
-            name
+        ErrorKind::Json => println!("An error occurred while (de)serializing JSON"),
+        ErrorKind::NoSuccessHttp => println!(
+            "A HTTP response had a status code that was not between 200-299"
         ),
-        ErrorKind::NoSuccessJson(name) => println!(
-            "{}: Skipping record/zone because JSON payload did not contain {{ \"success\": true }}",
-            name
+        ErrorKind::NoSuccessJson => println!(
+            "A JSON response payload did not contain {{ \"success\": true }}"
         ),
         ErrorKind::Unknown(e) => println!("An unexpected error occured!\n{}", e),
     };
