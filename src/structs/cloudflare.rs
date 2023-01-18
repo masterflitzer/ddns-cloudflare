@@ -13,12 +13,12 @@ pub(crate) mod request {
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub(crate) struct PatchDnsRecord {
-        pub comment: String,
-        pub content: IpAddr,
-        pub name: String,
-        pub proxied: bool,
-        pub tags: Vec<String>,
-        pub ttl: u32,
+        pub comment: Option<String>,
+        pub content: Option<IpAddr>,
+        pub name: Option<String>,
+        pub proxied: Option<bool>,
+        pub tags: Option<Vec<String>>,
+        pub ttl: Option<u32>,
     }
 }
 
