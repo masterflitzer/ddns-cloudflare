@@ -82,7 +82,7 @@ async fn main() {
     let response_zones = match api_get(&http, url_list_zones, &config.api_token).await {
         Ok(x) => x,
         Err(_) => {
-            handle_errors(&ErrorKind::API);
+            handle_errors(&ErrorKind::Api);
             exit(1);
         }
     };
@@ -127,7 +127,7 @@ async fn main() {
         let response_records = match api_get(&http, url_list_dns_records, &config.api_token).await {
             Ok(x) => x,
             Err(_) => {
-                handle_errors(&ErrorKind::API);
+                handle_errors(&ErrorKind::Api);
                 exit(1);
             }
         };
@@ -216,7 +216,7 @@ async fn main() {
                 {
                     Ok(x) => x,
                     Err(_) => {
-                        handle_errors(&ErrorKind::API);
+                        handle_errors(&ErrorKind::Api);
                         exit(1);
                     }
                 };
