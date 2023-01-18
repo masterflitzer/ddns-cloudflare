@@ -311,7 +311,7 @@ async fn obtain_records(data: &[ListDnsRecords], record_name: &str) -> Vec<ListD
     let record_ids = data
         .iter()
         .filter(|&x| x.name == record_name)
-        .filter(|&x| x.type_.to_uppercase() == "A" && x.type_.to_uppercase() == "AAAA")
+        .filter(|&x| x.type_.to_uppercase() == "A" || x.type_.to_uppercase() == "AAAA")
         .cloned()
         .collect();
     record_ids
