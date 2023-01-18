@@ -108,7 +108,7 @@ async fn main() {
             Some(x) => x,
             None => {
                 println!(
-                    "{}: Skipping this zone because the corresponding zone id could not be found",
+                    "Skipping \"{}\" because the corresponding zone could not be found",
                     &config_zone.name
                 );
                 continue;
@@ -161,7 +161,7 @@ async fn main() {
 
             if records.is_empty() {
                 println!(
-                    "{}: Skipping this record because the corresponding record ids could not be found",
+                    "Skipping \"{}\" because the corresponding records could not be found",
                     &config_record
                 );
                 continue;
@@ -233,10 +233,8 @@ async fn main() {
                 };
 
                 println!(
-                    "Successfully updated IP of record {} in zone {} to {}",
-                    record.name,
-                    zone.name,
-                    payload.content.unwrap()
+                    "Successfully updated IP of \"{}\" record \"{}\" in zone \"{}\" to \"{}\"",
+                    record.type_, record.name, zone.name, ip
                 );
             }
         }
