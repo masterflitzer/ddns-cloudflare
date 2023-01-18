@@ -4,7 +4,7 @@ pub(crate) mod structs;
 
 use clap::Parser;
 use errors::{handle_errors, ErrorKind};
-use reqwest::{Client as HttpClient, Response, Url};
+use reqwest::{header, Client as HttpClient, Response, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value as Json;
 use std::{
@@ -261,7 +261,12 @@ async fn determine_ipv6() -> Option<Ipv6Addr> {
 }
 
 async fn api_get(http: &HttpClient, url: Url, api_token: &str) -> Result<Response, reqwest::Error> {
-    let response = http.get(url).bearer_auth(api_token).send().await?;
+    let response = http
+        .get(url)
+        .bearer_auth(api_token)
+        .header(header::ACCEPT, "application/json")
+        .send()
+        .await?;
     Ok(response)
 }
 
@@ -274,6 +279,7 @@ async fn api_patch<T: Serialize>(
     let response = http
         .patch(url)
         .bearer_auth(api_token)
+        .header(header::ACCEPT, "application/json")
         .json(&body)
         .send()
         .await?;
