@@ -5,13 +5,17 @@ pub(crate) mod structs;
 use clap::Parser;
 use errors::{handle_errors, ErrorKind};
 use reqwest::{Client as HttpClient, Response, Url};
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value as Json;
-use std::{net::Ipv4Addr, process::exit};
+use std::{
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    process::exit,
+};
 use structs::{
+    cloudflare::request::PatchDnsRecord,
     cloudflare::response::{ListDnsRecords, ListZone},
     cloudflare::Cloudflare,
-    Args, Ipify, RecordIds,
+    Args, Ipify,
 };
 
 #[tokio::main]
@@ -51,9 +55,20 @@ async fn main() {
         }
     };
 
-    let ipv4: Option<Ipv4Addr> = determine_ipv4(&http).await.ok();
-    if let None = ipv4 {
-        handle_errors(&ErrorKind::IPv4);
+    let ipv4: Option<Ipv4Addr> = determine_ipv4(&http).await;
+    let ipv6: Option<Ipv6Addr> = determine_ipv6().await;
+
+    if ipv4.is_none() {
+        handle_errors(&ErrorKind::IPv4)
+    };
+
+    if ipv6.is_none() {
+        handle_errors(&ErrorKind::IPv6)
+    };
+
+    if ipv4.is_none() && ipv6.is_none() {
+        println!("Neither IPv4 nor IPv6 address could be determined");
+        exit(1)
     }
 
     let url_list_zones = match api_base.join("zones") {
@@ -88,20 +103,20 @@ async fn main() {
         }
     };
 
-    for zone in config.zones {
-        let zone_id = match obtain_zone_id(&data_zones, &zone.name).await {
+    for config_zone in config.zones {
+        let zone = match obtain_zone(&data_zones, &config_zone.name).await {
             Some(x) => x,
             None => {
                 println!(
                     "{}: Skipping this zone because the corresponding zone id could not be found",
-                    &zone.name
+                    &config_zone.name
                 );
                 continue;
             }
         };
 
         let url_list_dns_records =
-            match api_base.join(format!("zones/{}/dns_records", zone_id).as_str()) {
+            match api_base.join(format!("zones/{}/dns_records", zone.id).as_str()) {
                 Ok(x) => x,
                 Err(e) => {
                     handle_errors(&ErrorKind::Unknown(Box::new(e)));
@@ -137,66 +152,129 @@ async fn main() {
                 }
             };
 
-        for record in zone.records {
-            let record_id = match obtain_record_ids(
+        for config_record in config_zone.records {
+            let records = obtain_records(
                 &data_records,
-                format!("{}.{}", record, zone.name).as_str(),
+                format!("{}.{}", config_record, config_zone.name).as_str(),
             )
-            .await
-            {
-                Some(x) => x,
-                None => {
-                    println!(
-                    "{}: Skipping this record because the corresponding record id could not be found",
-                    &record
-                );
-                    continue;
-                }
-            };
+            .await;
 
-            let url_patch_dns_records =
-                match api_base.join(format!("zones/{}/dns_records", zone_id).as_str()) {
+            if records.is_empty() {
+                println!(
+                    "{}: Skipping this record because the corresponding record ids could not be found",
+                    &config_record
+                );
+                continue;
+            }
+
+            'outer: for record in records {
+                let url_patch_dns_records = match api_base
+                    .join(format!("zones/{}/dns_records/{}", zone.id, record.id).as_str())
+                {
                     Ok(x) => x,
                     Err(e) => {
                         handle_errors(&ErrorKind::Unknown(Box::new(e)));
                         exit(1)
                     }
                 };
+
+                let ip: IpAddr = match record.type_.to_uppercase().as_str() {
+                    "A" => 'inner: {
+                        if let Some(ip) = ipv4 {
+                            break 'inner IpAddr::V4(ip);
+                        }
+                        continue 'outer;
+                    }
+                    "AAAA" => 'inner: {
+                        if let Some(ip) = ipv6 {
+                            break 'inner IpAddr::V6(ip);
+                        }
+                        continue 'outer;
+                    }
+                    _ => {
+                        handle_errors(&ErrorKind::NonAddressRecord);
+                        continue;
+                    }
+                };
+
+                let payload = PatchDnsRecord {
+                    comment: None,
+                    content: Some(ip),
+                    name: None,
+                    proxied: None,
+                    tags: None,
+                    ttl: None,
+                };
+
+                let response_record = match api_patch(
+                    &http,
+                    url_patch_dns_records,
+                    &config.api_token,
+                    &payload,
+                )
+                .await
+                {
+                    Ok(x) => x,
+                    Err(_) => {
+                        handle_errors(&ErrorKind::API);
+                        exit(1);
+                    }
+                };
+
+                match deserialize_response(response_record).await {
+                    Ok(x) => x,
+                    Err(e) => {
+                        handle_errors(&e);
+                        match e {
+                            ErrorKind::NoSuccessHttp | ErrorKind::NoSuccessJson => continue,
+                            _ => exit(1),
+                        }
+                    }
+                };
+
+                println!(
+                    "Successfully updated IP of record {} in zone {} to {}",
+                    record.name,
+                    zone.name,
+                    payload.content.unwrap()
+                );
+            }
         }
     }
 }
 
-async fn determine_ipv4(http: &HttpClient) -> Result<Ipv4Addr, reqwest::Error> {
-    let response = http
+async fn determine_ipv4(http: &HttpClient) -> Option<Ipv4Addr> {
+    let response: Ipify = http
         .get("https://api.ipify.org?format=json")
         .send()
-        .await?
-        .json::<Ipify>()
-        .await?;
-    Ok(response.ip)
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    Some(response.ip)
 }
 
-async fn determine_ipv6() {
-    todo!()
+async fn determine_ipv6() -> Option<Ipv6Addr> {
+    // Some(Ipv6Addr::from_str("2000:dead:beef::dead:beef:420").unwrap());
+    None
 }
 
-async fn api_get(
-    http: &HttpClient,
-    url: Url,
-    api_token: impl AsRef<str>,
-) -> Result<Response, reqwest::Error> {
-    let response = http.get(url).bearer_auth(api_token.as_ref()).send().await?;
+async fn api_get(http: &HttpClient, url: Url, api_token: &str) -> Result<Response, reqwest::Error> {
+    let response = http.get(url).bearer_auth(api_token).send().await?;
     Ok(response)
 }
 
-async fn api_patch(
+async fn api_patch<T: Serialize>(
     http: &HttpClient,
     url: Url,
-    api_token: impl AsRef<str>,
+    api_token: &str,
+    body: T,
 ) -> Result<Response, reqwest::Error> {
     let response = http
         .patch(url)
-        .bearer_auth(api_token.as_ref())
+        .bearer_auth(api_token)
+        .json(&body)
         .send()
         .await?;
     Ok(response)
@@ -224,42 +302,19 @@ async fn deserialize_json_value<T: DeserializeOwned>(data: Json) -> Result<T, Er
     Ok(result)
 }
 
-async fn obtain_zone_id(data: &Vec<ListZone>, zone_name: impl AsRef<str>) -> Option<String> {
-    let zone = data.into_iter().find(|x| x.name == zone_name.as_ref())?;
-    Some(zone.id.to_owned())
+async fn obtain_zone(data: &[ListZone], zone_name: &str) -> Option<ListZone> {
+    let zone = data.iter().find(|&x| x.name == zone_name).cloned();
+    zone
 }
 
-async fn obtain_record_ids(
-    data: &Vec<ListDnsRecords>,
-    record_name: impl AsRef<str>,
-) -> Option<RecordIds> {
-    let records_filter = data
-        .to_owned()
-        .into_iter()
-        .filter(|x| x.name == record_name.as_ref());
-    let records_filter_v4 = records_filter.clone();
-    let records_filter_v6 = records_filter;
-
-    let record_ids_v4 = records_filter_v4
-        .filter(|x| x.type_.to_uppercase() == "A")
-        .map(|x| x.id)
-        .collect::<Vec<_>>();
-
-    let record_ids_v6 = records_filter_v6
-        .filter(|x| x.type_.to_uppercase() == "AAAA")
-        .map(|x| x.id)
-        .collect::<Vec<_>>();
-
-    let record_ids = RecordIds {
-        v4: record_ids_v4,
-        v6: record_ids_v6,
-    };
-
-    Some(record_ids)
-}
-
-async fn update_ip(response: Response, zone_id: impl AsRef<str>, record_id: impl AsRef<str>) {
-    todo!()
+async fn obtain_records(data: &[ListDnsRecords], record_name: &str) -> Vec<ListDnsRecords> {
+    let record_ids = data
+        .iter()
+        .filter(|&x| x.name == record_name)
+        .filter(|&x| x.type_.to_uppercase() == "A" && x.type_.to_uppercase() == "AAAA")
+        .cloned()
+        .collect();
+    record_ids
 }
 
 fn is_http_success(response: &Response) -> bool {
