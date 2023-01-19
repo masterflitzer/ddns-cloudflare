@@ -1,11 +1,15 @@
+pub(crate) mod api;
 pub(crate) mod config;
 pub(crate) mod errors;
+pub(crate) mod ip;
 pub(crate) mod structs;
 
+use api::{api_get, api_patch};
 use clap::Parser;
 use errors::{handle_errors, ErrorKind};
-use reqwest::{header, Client as HttpClient, Response, Url};
-use serde::{de::DeserializeOwned, Serialize};
+use ip::{determine_ipv4, determine_ipv6};
+use reqwest::{Client as HttpClient, Response, Url};
+use serde::de::DeserializeOwned;
 use serde_json::Value as Json;
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
@@ -15,7 +19,7 @@ use structs::{
     cloudflare::request::PatchDnsRecord,
     cloudflare::response::{ListDnsRecords, ListZone},
     cloudflare::Cloudflare,
-    Args, Ipify,
+    Args,
 };
 
 #[tokio::main]
@@ -239,49 +243,6 @@ async fn main() {
             }
         }
     }
-}
-
-async fn determine_ipv4(http: &HttpClient) -> Option<Ipv4Addr> {
-    let response: Ipify = http
-        .get("https://api.ipify.org?format=json")
-        .send()
-        .await
-        .ok()?
-        .json()
-        .await
-        .ok()?;
-    Some(response.ip)
-}
-
-async fn determine_ipv6() -> Option<Ipv6Addr> {
-    // Some(Ipv6Addr::from_str("2000:dead:beef::dead:beef:420").unwrap());
-    None
-}
-
-async fn api_get(http: &HttpClient, url: Url, api_token: &str) -> Result<Response, reqwest::Error> {
-    let response = http
-        .get(url)
-        .bearer_auth(api_token)
-        .header(header::ACCEPT, "application/json")
-        .send()
-        .await?;
-    Ok(response)
-}
-
-async fn api_patch<T: Serialize>(
-    http: &HttpClient,
-    url: Url,
-    api_token: &str,
-    body: T,
-) -> Result<Response, reqwest::Error> {
-    let response = http
-        .patch(url)
-        .bearer_auth(api_token)
-        .header(header::ACCEPT, "application/json")
-        .json(&body)
-        .send()
-        .await?;
-    Ok(response)
 }
 
 async fn deserialize_response(response: Response) -> Result<Cloudflare, ErrorKind> {
