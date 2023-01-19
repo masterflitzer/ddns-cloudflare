@@ -1,3 +1,5 @@
+#![feature(ip)]
+
 pub(crate) mod api;
 pub(crate) mod config;
 pub(crate) mod errors;
@@ -7,14 +9,11 @@ pub(crate) mod structs;
 use api::{api_get, api_patch};
 use clap::Parser;
 use errors::{handle_errors, ErrorKind};
-use ip::{determine_ipv4, determine_ipv6};
+use ip::determine_ip;
 use reqwest::{Client as HttpClient, Response, Url};
 use serde::de::DeserializeOwned;
 use serde_json::Value as Json;
-use std::{
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
-    process::exit,
-};
+use std::{net::IpAddr, process::exit};
 use structs::{
     cloudflare::request::PatchDnsRecord,
     cloudflare::response::{ListDnsRecords, ListZone},
@@ -50,17 +49,7 @@ async fn main() {
         }
     };
 
-    let http: HttpClient = HttpClient::new();
-    let api_base: Url = match Url::parse("https://api.cloudflare.com/client/v4/") {
-        Ok(x) => x,
-        Err(e) => {
-            handle_errors(&ErrorKind::Unknown(Box::new(e)));
-            exit(1)
-        }
-    };
-
-    let ipv4: Option<Ipv4Addr> = determine_ipv4(&http).await;
-    let ipv6: Option<Ipv6Addr> = determine_ipv6().await;
+    let (ipv4, ipv6) = determine_ip(&config).await;
 
     if ipv4.is_none() {
         handle_errors(&ErrorKind::IPv4)
@@ -74,6 +63,16 @@ async fn main() {
         println!("Neither IPv4 nor IPv6 address could be determined");
         exit(1)
     }
+
+    let http: HttpClient = HttpClient::new();
+
+    let api_base: Url = match Url::parse("https://api.cloudflare.com/client/v4/") {
+        Ok(x) => x,
+        Err(e) => {
+            handle_errors(&ErrorKind::Unknown(Box::new(e)));
+            exit(1)
+        }
+    };
 
     let url_list_zones = match api_base.join("zones") {
         Ok(x) => x,

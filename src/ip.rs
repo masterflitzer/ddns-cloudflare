@@ -1,20 +1,70 @@
-use crate::structs::Ipify;
+use crate::structs::{config::Config, Ipify};
+use local_ip_address::list_afinet_netifas;
 use reqwest::Client as HttpClient;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-pub(crate) async fn determine_ipv4(http: &HttpClient) -> Option<Ipv4Addr> {
+pub(crate) async fn determine_ip(config: &Config) -> (Option<Ipv4Addr>, Option<Ipv6Addr>) {
+    let ipv4 = determine_ipv4().await;
+    let ipv6 = determine_ipv6(config).await;
+    (ipv4, ipv6)
+}
+
+pub(crate) async fn determine_ipv4() -> Option<Ipv4Addr> {
+    let http = HttpClient::builder()
+        .local_address(Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)))
+        .build()
+        .ok()?;
     let response: Ipify = http
-        .get("https://api.ipify.org?format=json")
+        .get("https://api64.ipify.org?format=json")
         .send()
         .await
         .ok()?
         .json()
         .await
         .ok()?;
-    Some(response.ip)
+    match response.ip {
+        IpAddr::V4(x) => Some(x),
+        IpAddr::V6(_) => None,
+    }
 }
 
-pub(crate) async fn determine_ipv6() -> Option<Ipv6Addr> {
-    // Some(Ipv6Addr::from_str("2000:dead:beef::dead:beef:420").unwrap());
-    None
+pub(crate) async fn determine_ipv6(config: &Config) -> Option<Ipv6Addr> {
+    // let test = IpAddr::from_str("2000:dead:beef::dead:beef:420").ok()?;
+    let http = HttpClient::builder()
+        .local_address(Some(IpAddr::V6(Ipv6Addr::UNSPECIFIED)))
+        .build()
+        .ok()?;
+    let response: Ipify = http
+        .get("https://api64.ipify.org?format=json")
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+
+    let ip: IpAddr;
+
+    if config.ipv6_preferred {
+        ip = response.ip;
+    } else {
+        let prefix = response.ip.to_string().split(":").collect::<Vec<_>>()[..3].join(":") + ":";
+
+        let network_interfaces = list_afinet_netifas().ok()?;
+
+        let ips = network_interfaces
+            .iter()
+            .map(|(_, ip)| ip.to_canonical())
+            .filter(|&ip| ip.is_ipv6() && ip.is_global())
+            .filter(|&ip| ip.to_string().starts_with(&prefix))
+            .filter(|&ip| ip != response.ip)
+            .collect::<Vec<_>>();
+
+        ip = ips.first()?.to_owned();
+    }
+
+    return match ip {
+        IpAddr::V4(_) => None,
+        IpAddr::V6(x) => Some(x),
+    };
 }

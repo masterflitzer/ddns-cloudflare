@@ -3,7 +3,7 @@ pub(crate) mod config;
 
 use clap::Parser;
 use serde::{Deserialize, Serialize};
-use std::{net::Ipv4Addr, path::PathBuf};
+use std::{net::IpAddr, path::PathBuf};
 
 #[derive(Debug, Parser)]
 pub(crate) struct Args {
@@ -17,7 +17,7 @@ pub(crate) struct Args {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Ipify {
-    pub ip: Ipv4Addr,
+    pub ip: IpAddr,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
