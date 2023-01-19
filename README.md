@@ -4,6 +4,8 @@
 
 ```toml
 api_token = ""
+# Use the IPv6 address the OS prefers for outgoing connections (often temporary addresses therefore discouraged)
+ipv6_preferred = false
 
 [[zones]]
 name = "example.com"
