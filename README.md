@@ -12,8 +12,8 @@ name = "example.com"
 records = ["@", "www"]
 
 [[zones]]
-name = "mail.xyz"
-records = ["imap", "smtp"]
+name = "example.org"
+records = ["wiki"]
 
 ```
 
