@@ -1,0 +1,109 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  style:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup rust
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - name: Check formatting/style
+        run: cargo fmt --all --check
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup rust
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy
+      - name: Lint code
+        run: cargo clippy --all-features
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup rust
+        uses: dtolnay/rust-toolchain@nightly
+      - name: Build project
+        run: cargo build --verbose
+      - name: Test project
+        run: cargo test --verbose
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - aarch64-unknown-linux-gnu
+          - x86_64-pc-windows-gnu
+          - x86_64-unknown-freebsd
+          - x86_64-unknown-linux-gnu
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup rust
+        uses: dtolnay/rust-toolchain@nightly
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+      - name: Build target
+        run: cross build -r --target ${{ matrix.target }} --message-format=json | tee /tmp/.tmp
+      - name: Publish
+        env:
+          GITHUB_API_VER: "2022-11-28"
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          FILE="$(echo "${GITHUB_WORKSPACE}/$(cat /tmp/.tmp | tail -n 2 | head -n 1 | jq -r '.executable')" | tr -s '/')"
+          FILE_NAME="$(echo "${FILE}" | tr '/' '\n' | tail -n 1)"
+          OS="$(echo "${TARGET}" | tr '-' '\n' | head -n 3 | tail -n 1)"
+          ARCH="$(echo "${TARGET}" | tr '-' '\n' | head -n 1)"
+          ASSET_NAME="${OS}-${ARCH}-${FILE_NAME}"
+
+          CODE="$(curl -Lso /tmp/.tmp -w "%{response_code}" -X GET -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: ${GITHUB_API_VER}" "https://api.github.com/repos/${REPO}/releases/tags/${TAG}")"
+
+          if test "${CODE}" -ne 200
+          then
+            echo "::notice::Could not find a release for tag ${TAG} (Status Code: ${CODE})"
+
+            CODE="$(curl -Lso /tmp/.tmp -w "%{response_code}" -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: ${GITHUB_API_VER}" "https://api.github.com/repos/${REPO}/releases" -d "{ \"tag_name\": \"${TAG}\", \"name\": \"${TAG}\", \"body\": \"Release: ${TAG}\", \"draft\": false, \"prerelease\": false, \"generate_release_notes\": false }")"
+
+            if test "${CODE}" -ne 201
+            then
+              echo "::error::Could not create a new release for tag ${TAG} (Status Code: ${CODE})"
+              exit 1
+            fi
+          fi
+
+          RELEASE_ID="$(cat /tmp/.tmp | jq -r '.id')"
+
+          CODE="$(curl -Lso /tmp/.tmp -w "%{response_code}" -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: ${GITHUB_API_VER}" -H "Content-Type: application/octet-stream" "https://uploads.github.com/repos/${REPO}/releases/${RELEASE_ID}/assets?name=${ASSET_NAME}" --data-binary "@${FILE}")"
+
+          if test "${CODE}" -ne 201
+          then
+            echo "::error::Could not upload asset for release ${TAG} (Status Code: ${CODE})"
+            exit 1
+          fi
