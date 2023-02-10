@@ -13,6 +13,9 @@ pub(crate) struct Args {
     /// Print location of configuration file
     #[arg(long)]
     pub configuration: bool,
+    /// Print app version
+    #[arg(short, long)]
+    pub version: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

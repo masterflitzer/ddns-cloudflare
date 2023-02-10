@@ -18,7 +18,7 @@ pub(crate) fn path() -> Result<PathBuf, IOError> {
     let config_dir = ProjectDirs::config_dir(&project_dirs);
 
     let mut path = PathBuf::from(config_dir);
-    path.push(format!("{}.toml", name));
+    path.push(format!("{name}.toml"));
     Ok(path)
 }
 
@@ -40,6 +40,7 @@ pub(crate) fn get(path: impl AsRef<Path>) -> Result<Config, IOError> {
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
 
-    let config: Config = toml::from_str(&contents)?;
+    let config: Config =
+        toml::from_str(&contents).map_err(|_| IOError::from(ErrorKind::NotFound))?;
     Ok(config)
 }
