@@ -21,9 +21,16 @@ use structs::{
     Args,
 };
 
+const VERSION: Option<&str> = option_env!("CARGO_PKG_VERSION");
+
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
+
+    if args.version {
+        println!("{}", VERSION.unwrap_or("unknown"));
+        return;
+    }
 
     let config_path = match args.config {
         Some(x) => x,
