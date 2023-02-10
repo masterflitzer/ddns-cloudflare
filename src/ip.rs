@@ -43,12 +43,10 @@ pub(crate) async fn determine_ipv6(config: &Config) -> Option<Ipv6Addr> {
         .await
         .ok()?;
 
-    let ip: IpAddr;
+    let mut ip = response.ip;
 
-    if config.ipv6_preferred {
-        ip = response.ip;
-    } else {
-        let prefix = response.ip.to_string().split(":").collect::<Vec<_>>()[..3].join(":") + ":";
+    if !config.use_preferred_ipv6 {
+        let prefix = response.ip.to_string().split(':').collect::<Vec<_>>()[..3].join(":") + ":";
 
         let network_interfaces = list_afinet_netifas().ok()?;
 
@@ -63,8 +61,8 @@ pub(crate) async fn determine_ipv6(config: &Config) -> Option<Ipv6Addr> {
         ip = ips.first()?.to_owned();
     }
 
-    return match ip {
+    match ip {
         IpAddr::V4(_) => None,
         IpAddr::V6(x) => Some(x),
-    };
+    }
 }
