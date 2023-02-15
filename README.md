@@ -1,5 +1,7 @@
 # DDNS Cloudflare
 
+[![CI/CD](https://github.com/masterflitzer/ddns-cloudflare/actions/workflows/main.yml/badge.svg)](https://github.com/masterflitzer/ddns-cloudflare/actions/workflows/main.yml)
+
 ## Example Configuration
 
 ```toml
