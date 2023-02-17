@@ -163,11 +163,12 @@ async fn main() {
             };
 
         for config_record in config_zone.records {
-            let records = obtain_records(
-                &data_records,
-                format!("{}.{}", config_record, config_zone.name).as_str(),
-            )
-            .await;
+            let record_name = match config_record == "@" {
+                true => config_zone.name.clone(),
+                false => format!("{}.{}", config_record, config_zone.name),
+            };
+
+            let records = obtain_records(&data_records, record_name.as_str()).await;
 
             if records.is_empty() {
                 println!(
