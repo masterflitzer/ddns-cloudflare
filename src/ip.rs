@@ -58,7 +58,7 @@ pub(crate) async fn determine_ipv6(config: &Config) -> Option<Ipv6Addr> {
             .filter(|&ip| ip != response.ip)
             .collect::<Vec<_>>();
 
-        ip = ips.first()?.to_owned();
+        ip = ips.first().unwrap_or(&ip).to_owned();
     }
 
     match ip {
