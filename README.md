@@ -22,6 +22,6 @@ records = ["wiki"]
 ## Crontab
 
 ```bash
-@reboot root ddns_cloudflare &> /var/log/ddns_cloudflare.log
-@hourly root ddns_cloudflare &> /var/log/ddns_cloudflare.log
+@reboot root ddns_cloudflare > /var/log/ddns_cloudflare.log 2>&1
+@hourly root ddns_cloudflare > /var/log/ddns_cloudflare.log 2>&1
 ```
