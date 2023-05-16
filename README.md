@@ -6,17 +6,16 @@
 
 ```toml
 api_token = ""
-# Use the IPv6 address the OS prefers for outgoing connections (often temporary addresses therefore discouraged)
-use_preferred_ipv6 = false
 
-[[zones]]
-name = "example.com"
-records = ["@", "www"]
+[ipv6]
+# Prefer EUI-64 IPv6 address if available (has highest priority if true)
+prefer_eui64 = true
+# Prefer the IPv6 address that is used for outgoing connections (allows DDNS with privacy extensions)
+prefer_outgoing = false
 
-[[zones]]
-name = "example.org"
-records = ["wiki"]
-
+[records]
+"example.com" = ["@", "www"]
+"example.org" = ["wiki"]
 ```
 
 ## Crontab
