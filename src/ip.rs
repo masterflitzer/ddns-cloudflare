@@ -45,7 +45,7 @@ pub(crate) async fn determine_ipv6(config: &Config) -> Option<Ipv6Addr> {
 
     let mut ip = response.ip;
 
-    if !config.use_preferred_ipv6 {
+    if !config.ipv6.prefer_outgoing {
         let prefix = response.ip.to_string().split(':').collect::<Vec<_>>()[..3].join(":") + ":";
 
         let network_interfaces = list_afinet_netifas().ok()?;
@@ -66,3 +66,6 @@ pub(crate) async fn determine_ipv6(config: &Config) -> Option<Ipv6Addr> {
         IpAddr::V6(x) => Some(x),
     }
 }
+
+// EUI-48 -> EUI-64
+// pub(crate) async fn determine_mac() -> Option<String> {}

@@ -113,13 +113,13 @@ async fn main() {
         }
     };
 
-    for config_zone in config.zones {
-        let zone = match obtain_zone(&data_zones, &config_zone.name).await {
+    for config_zone in config.records.keys() {
+        let zone = match obtain_zone(&data_zones, config_zone).await {
             Some(x) => x,
             None => {
                 println!(
                     "Skipping \"{}\" because the corresponding zone could not be found",
-                    &config_zone.name
+                    &config_zone
                 );
                 continue;
             }
@@ -162,10 +162,15 @@ async fn main() {
                 }
             };
 
-        for config_record in config_zone.records {
+        let record_array = match config.records.get(config_zone) {
+            Some(x) => x,
+            None => continue,
+        };
+
+        for config_record in record_array {
             let record_name = match config_record == "@" {
-                true => config_zone.name.clone(),
-                false => format!("{}.{}", config_record, config_zone.name),
+                true => config_zone.to_owned(),
+                false => format!("{}.{}", config_record, config_zone),
             };
 
             let records = obtain_records(&data_records, record_name.as_str()).await;

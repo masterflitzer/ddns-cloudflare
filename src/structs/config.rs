@@ -1,14 +1,15 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub(crate) struct Config {
     pub api_token: String,
-    pub use_preferred_ipv6: bool,
-    pub zones: Vec<Zone>,
+    pub ipv6: Ipv6,
+    pub records: HashMap<String, Vec<String>>,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize)]
-pub(crate) struct Zone {
-    pub name: String,
-    pub records: Vec<String>,
+pub(crate) struct Ipv6 {
+    pub prefer_eui64: bool,
+    pub prefer_outgoing: bool,
 }
