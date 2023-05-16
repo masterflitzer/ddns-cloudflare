@@ -280,18 +280,15 @@ async fn deserialize_json_value<T: DeserializeOwned>(data: Json) -> Result<T, Er
 }
 
 async fn obtain_zone(data: &[ListZone], zone_name: &str) -> Option<ListZone> {
-    let zone = data.iter().find(|&x| x.name == zone_name).cloned();
-    zone
+    data.iter().find(|x| x.name == zone_name).cloned()
 }
 
 async fn obtain_records(data: &[ListDnsRecords], record_name: &str) -> Vec<ListDnsRecords> {
-    let record_ids = data
-        .iter()
-        .filter(|&x| x.name == record_name)
-        .filter(|&x| x.type_.to_uppercase() == "A" || x.type_.to_uppercase() == "AAAA")
+    data.iter()
+        .filter(|x| x.name == record_name)
+        .filter(|x| x.type_.to_uppercase() == "A" || x.type_.to_uppercase() == "AAAA")
         .cloned()
-        .collect();
-    record_ids
+        .collect()
 }
 
 fn is_http_success(response: &Response) -> bool {

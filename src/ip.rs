@@ -1,5 +1,7 @@
 use crate::structs::{config::Config, Ipify};
+use advmac::MacAddr6;
 use local_ip_address::list_afinet_netifas;
+use mac_address2::get_mac_address;
 use reqwest::Client as HttpClient;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -14,6 +16,7 @@ pub(crate) async fn determine_ipv4() -> Option<Ipv4Addr> {
         .local_address(Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)))
         .build()
         .ok()?;
+
     let response: Ipify = http
         .get("https://api64.ipify.org?format=json")
         .send()
@@ -22,6 +25,7 @@ pub(crate) async fn determine_ipv4() -> Option<Ipv4Addr> {
         .json()
         .await
         .ok()?;
+
     match response.ip {
         IpAddr::V4(x) => Some(x),
         IpAddr::V6(_) => None,
@@ -29,11 +33,11 @@ pub(crate) async fn determine_ipv4() -> Option<Ipv4Addr> {
 }
 
 pub(crate) async fn determine_ipv6(config: &Config) -> Option<Ipv6Addr> {
-    // let test = IpAddr::from_str("2000:dead:beef::dead:beef:420").ok()?;
     let http = HttpClient::builder()
         .local_address(Some(IpAddr::V6(Ipv6Addr::UNSPECIFIED)))
         .build()
         .ok()?;
+
     let response: Ipify = http
         .get("https://api64.ipify.org?format=json")
         .send()
@@ -43,29 +47,60 @@ pub(crate) async fn determine_ipv6(config: &Config) -> Option<Ipv6Addr> {
         .await
         .ok()?;
 
-    let mut ip = response.ip;
-
-    if !config.ipv6.prefer_outgoing {
-        let prefix = response.ip.to_string().split(':').collect::<Vec<_>>()[..3].join(":") + ":";
-
-        let network_interfaces = list_afinet_netifas().ok()?;
-
-        let ips = network_interfaces
-            .iter()
-            .map(|(_, ip)| ip.to_canonical())
-            .filter(|&ip| ip.is_ipv6() && ip.is_global())
-            .filter(|&ip| ip.to_string().starts_with(&prefix))
-            .filter(|&ip| ip != response.ip)
-            .collect::<Vec<_>>();
-
-        ip = ips.first().unwrap_or(&ip).to_owned();
-    }
-
-    match ip {
+    let ipv6 = match response.ip {
         IpAddr::V4(_) => None,
         IpAddr::V6(x) => Some(x),
+    }?;
+
+    let (prefix, _) = split_ipv6(&ipv6)?;
+
+    let network_interfaces = list_afinet_netifas().ok()?;
+    let ipv6_addresses = network_interfaces
+        .into_iter()
+        .filter_map(|(_, ip)| match ip.to_canonical() {
+            IpAddr::V4(_) => None,
+            IpAddr::V6(x) => Some(x),
+        })
+        .filter(|ip| ip.is_global())
+        .filter(|ip| match split_ipv6(ip) {
+            Some((p, _)) => p == prefix,
+            None => false,
+        })
+        .collect::<Vec<_>>();
+
+    if ipv6_addresses.len() <= 1 {
+        return ipv6_addresses.first().cloned();
     }
+
+    if config.ipv6.prefer_eui64 {
+        let mac = get_mac_address().ok()?;
+        let eui48 = MacAddr6::new(mac?.bytes());
+        let eui64 = eui48.to_modified_eui64();
+        let suffix = eui64.to_array();
+        if let Some(x) = ipv6_addresses.iter().find(|ip| match split_ipv6(ip) {
+            Some((_, s)) => s == suffix,
+            None => false,
+        }) {
+            return Some(x.to_owned());
+        };
+    }
+
+    if !config.ipv6.prefer_outgoing {
+        return ipv6_addresses
+            .into_iter()
+            .filter(|ip| ip != &ipv6)
+            .collect::<Vec<_>>()
+            .first()
+            .cloned();
+    }
+
+    Some(ipv6)
 }
 
-// EUI-48 -> EUI-64
-// pub(crate) async fn determine_mac() -> Option<String> {}
+fn split_ipv6(ipv6: &Ipv6Addr) -> Option<([u8; 8], [u8; 8])> {
+    let octets = ipv6.octets();
+    let (octets_prefix, octets_suffix) = octets.split_at(8);
+    let prefix: [u8; 8] = octets_prefix.try_into().ok()?;
+    let suffix: [u8; 8] = octets_suffix.try_into().ok()?;
+    Some((prefix, suffix))
+}
