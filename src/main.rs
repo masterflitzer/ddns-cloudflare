@@ -113,13 +113,13 @@ async fn main() {
         }
     };
 
-    for config_zone in config.zones {
-        let zone = match obtain_zone(&data_zones, &config_zone.name).await {
+    for config_zone in config.records.keys() {
+        let zone = match obtain_zone(&data_zones, config_zone).await {
             Some(x) => x,
             None => {
                 println!(
                     "Skipping \"{}\" because the corresponding zone could not be found",
-                    &config_zone.name
+                    &config_zone
                 );
                 continue;
             }
@@ -162,10 +162,15 @@ async fn main() {
                 }
             };
 
-        for config_record in config_zone.records {
+        let record_array = match config.records.get(config_zone) {
+            Some(x) => x,
+            None => continue,
+        };
+
+        for config_record in record_array {
             let record_name = match config_record == "@" {
-                true => config_zone.name.clone(),
-                false => format!("{}.{}", config_record, config_zone.name),
+                true => config_zone.to_owned(),
+                false => format!("{}.{}", config_record, config_zone),
             };
 
             let records = obtain_records(&data_records, record_name.as_str()).await;
@@ -275,18 +280,15 @@ async fn deserialize_json_value<T: DeserializeOwned>(data: Json) -> Result<T, Er
 }
 
 async fn obtain_zone(data: &[ListZone], zone_name: &str) -> Option<ListZone> {
-    let zone = data.iter().find(|&x| x.name == zone_name).cloned();
-    zone
+    data.iter().find(|x| x.name == zone_name).cloned()
 }
 
 async fn obtain_records(data: &[ListDnsRecords], record_name: &str) -> Vec<ListDnsRecords> {
-    let record_ids = data
-        .iter()
-        .filter(|&x| x.name == record_name)
-        .filter(|&x| x.type_.to_uppercase() == "A" || x.type_.to_uppercase() == "AAAA")
+    data.iter()
+        .filter(|x| x.name == record_name)
+        .filter(|x| x.type_.to_uppercase() == "A" || x.type_.to_uppercase() == "AAAA")
         .cloned()
-        .collect();
-    record_ids
+        .collect()
 }
 
 fn is_http_success(response: &Response) -> bool {
