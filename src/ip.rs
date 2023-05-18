@@ -1,5 +1,4 @@
 use crate::structs::{config::Config, Ipify};
-use advmac::MacAddr6;
 use local_ip_address::list_afinet_netifas;
 use mac_address2::get_mac_address;
 use reqwest::Client as HttpClient;
@@ -74,9 +73,7 @@ pub(crate) async fn determine_ipv6(config: &Config) -> Option<Ipv6Addr> {
 
     if config.ipv6.prefer_eui64 {
         let mac = get_mac_address().ok()?;
-        let eui48 = MacAddr6::new(mac?.bytes());
-        let eui64 = eui48.to_modified_eui64();
-        let suffix = eui64.to_array();
+        let suffix = eui48_to_modified_eui64(&mac?.bytes())?;
         if let Some(x) = ipv6_addresses.iter().find(|ip| match split_ipv6(ip) {
             Some((_, s)) => s == suffix,
             None => false,
@@ -99,8 +96,20 @@ pub(crate) async fn determine_ipv6(config: &Config) -> Option<Ipv6Addr> {
 
 fn split_ipv6(ipv6: &Ipv6Addr) -> Option<([u8; 8], [u8; 8])> {
     let octets = ipv6.octets();
-    let (octets_prefix, octets_suffix) = octets.split_at(8);
-    let prefix: [u8; 8] = octets_prefix.try_into().ok()?;
-    let suffix: [u8; 8] = octets_suffix.try_into().ok()?;
+    let (p, s) = octets.split_at(8);
+    let prefix: [u8; 8] = p.try_into().ok()?;
+    let suffix: [u8; 8] = s.try_into().ok()?;
     Some((prefix, suffix))
+}
+
+fn eui48_to_modified_eui64(eui48: &[u8; 6]) -> Option<[u8; 8]> {
+    let (p, s) = eui48.split_at(3);
+    let prefix: [u8; 3] = p.try_into().ok()?;
+    let suffix: [u8; 3] = s.try_into().ok()?;
+    let eui64 = [
+        prefix[0], prefix[1], prefix[2], 0xff, 0xfe, suffix[0], suffix[1], suffix[2],
+    ];
+    let mut modified_eui64 = eui64;
+    modified_eui64[0] ^= 0b0000_0010;
+    Some(modified_eui64)
 }
