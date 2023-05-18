@@ -82,16 +82,16 @@ pub(crate) async fn determine_ipv6(config: &Config) -> Option<Ipv6Addr> {
         };
     }
 
-    if !config.ipv6.prefer_outgoing {
-        return ipv6_addresses
-            .into_iter()
-            .filter(|ip| ip != &ipv6)
-            .collect::<Vec<_>>()
-            .first()
-            .cloned();
+    if config.ipv6.prefer_outgoing {
+        return Some(ipv6);
     }
 
-    Some(ipv6)
+    return ipv6_addresses
+        .into_iter()
+        .filter(|ip| ip != &ipv6)
+        .collect::<Vec<_>>()
+        .first()
+        .cloned();
 }
 
 fn split_ipv6(ipv6: &Ipv6Addr) -> Option<([u8; 8], [u8; 8])> {
