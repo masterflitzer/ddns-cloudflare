@@ -1,6 +1,6 @@
 use crate::structs::{config::Config, Ipify};
 use local_ip_address::list_afinet_netifas;
-use mac_address2::get_mac_address;
+use mac_address::get_mac_address;
 use reqwest::Client as HttpClient;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
