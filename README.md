@@ -15,23 +15,23 @@
 - Depending on the selected destination you may have to become root: `sudo -i`
 
 ```bash
-asset="linux-aarch64-ddns_cloudflare"; bin="/usr/local/sbin/ddns_cloudflare"; curl -Lso "${bin}.new" "https://github.com/masterflitzer/ddns-cloudflare/releases/latest/download/${asset}" && mv "${bin}.new" "${bin}" && chmod 0754 "${bin}"
+asset="linux-aarch64-ddns_cloudflare"; bin="/usr/local/sbin/ddns-cloudflare"; curl -Lso "${bin}.new" "https://github.com/masterflitzer/ddns-cloudflare/releases/latest/download/${asset}" && mv "${bin}.new" "${bin}" && chmod 0754 "${bin}"
 
-vim $(ddns_cloudflare --configuration)
+vim $(ddns-cloudflare --configuration)
 vim /etc/cron.d/ddns-cloudflare
 ```
 
 ### Windows (pwsh)
 
 ```pwsh
-$asset = "windows-x86_64-ddns_cloudflare.exe"; $bin = "$env:localappdata/programs/ddns-cloudflare/ddns-cloudflare.exe"; curl -Lso "${bin}.new" "https://github.com/masterflitzer/ddns-cloudflare/releases/latest/download/${asset}" && mv "${bin}.new" "${bin}"
+$asset = "windows-x86_64-ddns_cloudflare.exe"; $bin = "$env:localappdata/programs/ddns-cloudflare/ddns-cloudflare.exe"; curl -Lso "${bin}.new" "https://github.com/masterflitzer/ddns-cloudflare/releases/latest/download/${asset}" && mv -force "${bin}.new" "${bin}"
 ```
 
 - Use **Task Scheduler** as an replacement for **cron** on Windows
 
 ## Configuration
 
-- Print location of configuration file: `ddns_cloudflare --configuration`
+- Print location of configuration file: `ddns-cloudflare --configuration`
 
 ```toml
 # https://github.com/masterflitzer/ddns-cloudflare#readme
@@ -52,6 +52,6 @@ prefer_outgoing = false
 ## Crontab
 
 ```bash
-@reboot root /usr/local/sbin/ddns_cloudflare > /var/log/ddns_cloudflare.log 2>&1
-@hourly root /usr/local/sbin/ddns_cloudflare > /var/log/ddns_cloudflare.log 2>&1
+@reboot root /usr/local/sbin/ddns-cloudflare > /var/log/ddns-cloudflare.log 2>&1
+@hourly root /usr/local/sbin/ddns-cloudflare > /var/log/ddns-cloudflare.log 2>&1
 ```
