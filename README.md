@@ -10,15 +10,19 @@
 - Configure a cron job
 
 ```bash
+sudo -i
 ASSET_NAME="linux-aarch64-ddns_cloudflare"
 curl -Lso /usr/local/sbin/ddns_cloudflare https://github.com/masterflitzer/ddns-cloudflare/releases/latest/download/${ASSET_NAME}
 vim $(ddns_cloudflare --configuration)
 vim /etc/cron.d/ddns-cloudflare
+exit
 ```
 
 ## Example Configuration
 
 ```toml
+# https://github.com/masterflitzer/ddns-cloudflare#readme
+
 api_token = ""
 
 [ipv6]
