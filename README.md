@@ -4,21 +4,34 @@
 
 ## Setup
 
-- Change the `ASSET_NAME` variable according to your target platform (see [GitHub Releases](https://github.com/masterflitzer/ddns-cloudflare/releases))
+- Change the `asset` variable according to your target platform (see [GitHub Releases](https://github.com/masterflitzer/ddns-cloudflare/releases))
+- Change the `bin` variable if you wish to use a different destination
 - Download the app
 - Edit the configuration (you can find an example below)
 - Configure a cron job
 
+### Unix-like (bash)
+
+- Depending on the selected destination you may have to become root: `sudo -i`
+
 ```bash
-sudo -i
-ASSET_NAME="linux-aarch64-ddns_cloudflare"
-curl -Lso /usr/local/sbin/ddns_cloudflare https://github.com/masterflitzer/ddns-cloudflare/releases/latest/download/${ASSET_NAME}
+asset="linux-aarch64-ddns_cloudflare"; bin="/usr/local/sbin/ddns_cloudflare"; curl -Lso "${bin}.new" "https://github.com/masterflitzer/ddns-cloudflare/releases/latest/download/${asset}" && mv "${bin}.new" "${bin}" && chmod 0754 "${bin}"
+
 vim $(ddns_cloudflare --configuration)
 vim /etc/cron.d/ddns-cloudflare
-exit
 ```
 
-## Example Configuration
+### Windows (pwsh)
+
+```pwsh
+$asset = "windows-x86_64-ddns_cloudflare.exe"; $bin = "$env:localappdata/programs/ddns-cloudflare/ddns-cloudflare.exe"; curl -Lso "${bin}.new" "https://github.com/masterflitzer/ddns-cloudflare/releases/latest/download/${asset}" && mv "${bin}.new" "${bin}"
+```
+
+- Use **Task Scheduler** as an replacement for **cron** on Windows
+
+## Configuration
+
+- Print location of configuration file: `ddns_cloudflare --configuration`
 
 ```toml
 # https://github.com/masterflitzer/ddns-cloudflare#readme
