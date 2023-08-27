@@ -1,8 +1,13 @@
-use crate::structs::{config::Config, Ipify};
+use crate::structs::config::Config;
 use local_ip_address::list_afinet_netifas;
 use mac_address::get_mac_address;
 use reqwest::Client as HttpClient;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::{
+    collections::HashMap,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    str::FromStr,
+    time::Duration,
+};
 
 pub(crate) async fn determine_ip(config: &Config) -> (Option<Ipv4Addr>, Option<Ipv6Addr>) {
     let ipv4 = determine_ipv4().await;
@@ -10,43 +15,79 @@ pub(crate) async fn determine_ip(config: &Config) -> (Option<Ipv4Addr>, Option<I
     (ipv4, ipv6)
 }
 
-pub(crate) async fn determine_ipv4() -> Option<Ipv4Addr> {
+pub(crate) async fn query_ip(ip_enum: IpAddr) -> Option<IpAddr> {
+    let local_ip: IpAddr = match ip_enum {
+        IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+    };
+
     let http = HttpClient::builder()
-        .local_address(Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)))
+        .local_address(local_ip)
+        .timeout(Duration::from_secs(30))
         .build()
         .ok()?;
 
-    let response: Ipify = http
-        .get("https://api64.ipify.org?format=json")
+    let response = http
+        .get("https://one.one.one.one/cdn-cgi/trace")
         .send()
         .await
         .ok()?
-        .json()
+        .text()
         .await
         .ok()?;
 
-    match response.ip {
+    let data: HashMap<String, String> = response
+        .lines()
+        .map(|x| match x.split_once('=') {
+            Some((key, value)) => (key.to_owned(), value.to_owned()),
+            None => (String::new(), String::new()),
+        })
+        .collect();
+
+    let ip = data.get("ip")?;
+    let ip_address = IpAddr::from_str(ip).ok()?;
+    Some(ip_address)
+}
+
+fn split_ipv6(ipv6: &Ipv6Addr) -> Option<([u8; 8], [u8; 8])> {
+    let octets = ipv6.octets();
+    let (p, s) = octets.split_at(8);
+    let prefix: [u8; 8] = p.try_into().ok()?;
+    let suffix: [u8; 8] = s.try_into().ok()?;
+    Some((prefix, suffix))
+}
+
+fn eui48_to_modified_eui64(eui48: &[u8; 6]) -> Option<[u8; 8]> {
+    let (p, s) = eui48.split_at(3);
+    let prefix: [u8; 3] = p.try_into().ok()?;
+    let suffix: [u8; 3] = s.try_into().ok()?;
+    let eui64 = [
+        prefix[0], prefix[1], prefix[2], 0xff, 0xfe, suffix[0], suffix[1], suffix[2],
+    ];
+    let mut modified_eui64 = eui64;
+    modified_eui64[0] ^= 0b0000_0010;
+    Some(modified_eui64)
+}
+
+pub(crate) async fn determine_ipv4() -> Option<Ipv4Addr> {
+    let ipv4_unspecified = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+
+    let ip = query_ip(ipv4_unspecified).await?;
+
+    let ipv4 = match ip {
         IpAddr::V4(x) => Some(x),
         IpAddr::V6(_) => None,
-    }
+    }?;
+
+    Some(ipv4)
 }
 
 pub(crate) async fn determine_ipv6(config: &Config) -> Option<Ipv6Addr> {
-    let http = HttpClient::builder()
-        .local_address(Some(IpAddr::V6(Ipv6Addr::UNSPECIFIED)))
-        .build()
-        .ok()?;
+    let ipv6_unspecified = IpAddr::V6(Ipv6Addr::UNSPECIFIED);
 
-    let response: Ipify = http
-        .get("https://api64.ipify.org?format=json")
-        .send()
-        .await
-        .ok()?
-        .json()
-        .await
-        .ok()?;
+    let ip = query_ip(ipv6_unspecified).await?;
 
-    let ipv6 = match response.ip {
+    let ipv6 = match ip {
         IpAddr::V4(_) => None,
         IpAddr::V6(x) => Some(x),
     }?;
@@ -92,24 +133,4 @@ pub(crate) async fn determine_ipv6(config: &Config) -> Option<Ipv6Addr> {
         .collect::<Vec<_>>()
         .first()
         .cloned();
-}
-
-fn split_ipv6(ipv6: &Ipv6Addr) -> Option<([u8; 8], [u8; 8])> {
-    let octets = ipv6.octets();
-    let (p, s) = octets.split_at(8);
-    let prefix: [u8; 8] = p.try_into().ok()?;
-    let suffix: [u8; 8] = s.try_into().ok()?;
-    Some((prefix, suffix))
-}
-
-fn eui48_to_modified_eui64(eui48: &[u8; 6]) -> Option<[u8; 8]> {
-    let (p, s) = eui48.split_at(3);
-    let prefix: [u8; 3] = p.try_into().ok()?;
-    let suffix: [u8; 3] = s.try_into().ok()?;
-    let eui64 = [
-        prefix[0], prefix[1], prefix[2], 0xff, 0xfe, suffix[0], suffix[1], suffix[2],
-    ];
-    let mut modified_eui64 = eui64;
-    modified_eui64[0] ^= 0b0000_0010;
-    Some(modified_eui64)
 }
