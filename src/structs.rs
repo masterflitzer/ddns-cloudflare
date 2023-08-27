@@ -3,7 +3,7 @@ pub(crate) mod config;
 
 use clap::Parser;
 use serde::{Deserialize, Serialize};
-use std::{net::IpAddr, path::PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 pub(crate) struct Args {
@@ -16,11 +16,6 @@ pub(crate) struct Args {
     /// Print app version
     #[arg(short, long)]
     pub version: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct Ipify {
-    pub ip: IpAddr,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
