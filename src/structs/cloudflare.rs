@@ -36,11 +36,7 @@ pub(crate) mod response {
         pub content: String,
         pub id: String,
         pub name: String,
-        pub proxied: bool,
-        pub ttl: u32,
         #[serde(rename = "type")]
         pub type_: String,
-        pub zone_id: String,
-        pub zone_name: String,
     }
 }
