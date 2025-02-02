@@ -17,14 +17,14 @@
 ```bash
 asset="linux-aarch64-ddns_cloudflare"; bin="/usr/local/sbin/ddns-cloudflare"; curl -Lso "${bin}.new" "https://github.com/masterflitzer/ddns-cloudflare/releases/latest/download/${asset}" && mv "${bin}.new" "${bin}" && chmod 0754 "${bin}"
 
-vim $(ddns-cloudflare --configuration)
+vim "$(ddns-cloudflare --configuration)"
 vim /etc/cron.d/ddns-cloudflare
 ```
 
 ### Windows (pwsh)
 
 ```pwsh
-$asset = "windows-x86_64-ddns_cloudflare.exe"; $bin = "$env:localappdata/programs/ddns-cloudflare/ddns-cloudflare.exe"; curl -Lso "${bin}.new" "https://github.com/masterflitzer/ddns-cloudflare/releases/latest/download/${asset}" && mv -force "${bin}.new" "${bin}"
+$asset = "windows-x86_64-ddns_cloudflare.exe"; $bin = "$env:LOCALAPPDATA/Programs/ddns-cloudflare/ddns-cloudflare.exe"; curl.exe -Lso "${bin}.new" "https://github.com/masterflitzer/ddns-cloudflare/releases/latest/download/${asset}" && mv -force "${bin}.new" "${bin}"
 ```
 
 - Use **Task Scheduler** as an replacement for **cron** on Windows
