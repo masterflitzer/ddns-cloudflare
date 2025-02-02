@@ -38,7 +38,7 @@ async fn main() {
             Ok(x) => x,
             Err(e) => {
                 handle_errors(&ErrorKind::ConfigPath(e));
-                exit(1);
+                exit(100);
             }
         },
     };
@@ -52,7 +52,7 @@ async fn main() {
         Ok(x) => x,
         Err(e) => {
             handle_errors(&ErrorKind::Config(e));
-            exit(1)
+            exit(101)
         }
     };
 
@@ -68,7 +68,7 @@ async fn main() {
 
     if ipv4.is_none() && ipv6.is_none() {
         println!("Neither IPv4 nor IPv6 address could be determined");
-        exit(1)
+        exit(102)
     }
 
     let http: HttpClient = HttpClient::new();
@@ -77,7 +77,7 @@ async fn main() {
         Ok(x) => x,
         Err(e) => {
             handle_errors(&ErrorKind::Unknown(Box::new(e)));
-            exit(1)
+            exit(103)
         }
     };
 
@@ -85,7 +85,7 @@ async fn main() {
         Ok(x) => x,
         Err(e) => {
             handle_errors(&ErrorKind::Unknown(Box::new(e)));
-            exit(1)
+            exit(104)
         }
     };
 
@@ -93,7 +93,7 @@ async fn main() {
         Ok(x) => x,
         Err(_) => {
             handle_errors(&ErrorKind::Api);
-            exit(1);
+            exit(105);
         }
     };
 
@@ -101,7 +101,7 @@ async fn main() {
         Ok(x) => x,
         Err(e) => {
             handle_errors(&e);
-            exit(1);
+            exit(106);
         }
     };
 
@@ -109,7 +109,7 @@ async fn main() {
         Ok(x) => x,
         Err(e) => {
             handle_errors(&e);
-            exit(1);
+            exit(107);
         }
     };
 
@@ -130,7 +130,7 @@ async fn main() {
                 Ok(x) => x,
                 Err(e) => {
                     handle_errors(&ErrorKind::Unknown(Box::new(e)));
-                    exit(1)
+                    exit(108)
                 }
             };
 
@@ -138,7 +138,7 @@ async fn main() {
             Ok(x) => x,
             Err(_) => {
                 handle_errors(&ErrorKind::Api);
-                exit(1);
+                exit(109);
             }
         };
 
@@ -148,7 +148,7 @@ async fn main() {
                 handle_errors(&e);
                 match e {
                     ErrorKind::NoSuccessHttp | ErrorKind::NoSuccessJson => continue,
-                    _ => exit(1),
+                    _ => exit(110),
                 }
             }
         };
@@ -158,7 +158,7 @@ async fn main() {
                 Ok(x) => x,
                 Err(e) => {
                     handle_errors(&e);
-                    exit(1);
+                    exit(111);
                 }
             };
 
@@ -190,7 +190,7 @@ async fn main() {
                     Ok(x) => x,
                     Err(e) => {
                         handle_errors(&ErrorKind::Unknown(Box::new(e)));
-                        exit(1)
+                        exit(112)
                     }
                 };
 
@@ -233,7 +233,7 @@ async fn main() {
                     Ok(x) => x,
                     Err(_) => {
                         handle_errors(&ErrorKind::Api);
-                        exit(1);
+                        exit(113);
                     }
                 };
 
@@ -243,7 +243,7 @@ async fn main() {
                         handle_errors(&e);
                         match e {
                             ErrorKind::NoSuccessHttp | ErrorKind::NoSuccessJson => continue,
-                            _ => exit(1),
+                            _ => exit(114),
                         }
                     }
                 };
