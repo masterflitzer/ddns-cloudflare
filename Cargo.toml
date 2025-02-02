@@ -3,18 +3,16 @@ name = "ddns_cloudflare"
 version = "0.5.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-clap = { version = "4.3.21", features = ["derive"] }
-directories = "5.0.1"
-local-ip-address = "0.5.4"
-mac_address = "1.1.5"
-reqwest = { version = "0.11.18", default-features = false, features = [
-    "json",
-    "rustls-tls",
+clap = { version = "4.5.27", features = ["derive"] }
+directories = "6.0.0"
+local-ip-address = "0.6.3"
+mac_address = "1.1.7"
+reqwest = { version = "0.12.12", default-features = false, features = [
+	"json",
+	"rustls-tls",
 ] }
-serde = { version = "1.0.183", features = ["derive"] }
-serde_json = "1.0.104"
-tokio = { version = "1.29.1", features = ["full"] }
-toml = "0.7.6"
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.138"
+tokio = { version = "1.43.0", features = ["full"] }
+toml = "0.8.19"
