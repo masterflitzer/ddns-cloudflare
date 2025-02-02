@@ -13,7 +13,7 @@ use ip::determine_ip;
 use reqwest::{Client as HttpClient, Response, Url};
 use serde::de::DeserializeOwned;
 use serde_json::Value as Json;
-use std::{net::IpAddr, process::exit};
+use std::{net::IpAddr, process::exit, str::FromStr};
 use structs::{
     cloudflare::request::PatchDnsRecord,
     cloudflare::response::{ListDnsRecords, ListZone},
@@ -38,7 +38,7 @@ async fn main() {
             Ok(x) => x,
             Err(e) => {
                 handle_errors(&ErrorKind::ConfigPath(e));
-                exit(1);
+                exit(100);
             }
         },
     };
@@ -52,7 +52,7 @@ async fn main() {
         Ok(x) => x,
         Err(e) => {
             handle_errors(&ErrorKind::Config(e));
-            exit(1)
+            exit(101)
         }
     };
 
@@ -68,7 +68,7 @@ async fn main() {
 
     if ipv4.is_none() && ipv6.is_none() {
         println!("Neither IPv4 nor IPv6 address could be determined");
-        exit(1)
+        exit(102)
     }
 
     let http: HttpClient = HttpClient::new();
@@ -77,7 +77,7 @@ async fn main() {
         Ok(x) => x,
         Err(e) => {
             handle_errors(&ErrorKind::Unknown(Box::new(e)));
-            exit(1)
+            exit(103)
         }
     };
 
@@ -85,7 +85,7 @@ async fn main() {
         Ok(x) => x,
         Err(e) => {
             handle_errors(&ErrorKind::Unknown(Box::new(e)));
-            exit(1)
+            exit(104)
         }
     };
 
@@ -93,7 +93,7 @@ async fn main() {
         Ok(x) => x,
         Err(_) => {
             handle_errors(&ErrorKind::Api);
-            exit(1);
+            exit(105);
         }
     };
 
@@ -101,7 +101,7 @@ async fn main() {
         Ok(x) => x,
         Err(e) => {
             handle_errors(&e);
-            exit(1);
+            exit(106);
         }
     };
 
@@ -109,7 +109,7 @@ async fn main() {
         Ok(x) => x,
         Err(e) => {
             handle_errors(&e);
-            exit(1);
+            exit(107);
         }
     };
 
@@ -130,7 +130,7 @@ async fn main() {
                 Ok(x) => x,
                 Err(e) => {
                     handle_errors(&ErrorKind::Unknown(Box::new(e)));
-                    exit(1)
+                    exit(108)
                 }
             };
 
@@ -138,7 +138,7 @@ async fn main() {
             Ok(x) => x,
             Err(_) => {
                 handle_errors(&ErrorKind::Api);
-                exit(1);
+                exit(109);
             }
         };
 
@@ -148,7 +148,7 @@ async fn main() {
                 handle_errors(&e);
                 match e {
                     ErrorKind::NoSuccessHttp | ErrorKind::NoSuccessJson => continue,
-                    _ => exit(1),
+                    _ => exit(110),
                 }
             }
         };
@@ -158,16 +158,16 @@ async fn main() {
                 Ok(x) => x,
                 Err(e) => {
                     handle_errors(&e);
-                    exit(1);
+                    exit(111);
                 }
             };
 
-        let record_array = match config.records.get(config_zone) {
+        let config_records = match config.records.get(config_zone) {
             Some(x) => x,
             None => continue,
         };
 
-        for config_record in record_array {
+        for config_record in config_records {
             let record_name = match config_record == "@" {
                 true => config_zone.to_owned(),
                 false => format!("{}.{}", config_record, config_zone),
@@ -190,7 +190,7 @@ async fn main() {
                     Ok(x) => x,
                     Err(e) => {
                         handle_errors(&ErrorKind::Unknown(Box::new(e)));
-                        exit(1)
+                        exit(112)
                     }
                 };
 
@@ -213,6 +213,18 @@ async fn main() {
                     }
                 };
 
+                let msg = format!(
+                    "\"{}\" Record \"{}\" in zone \"{}\" with IP address \"{}\"",
+                    record.type_, record.name, zone.name, ip
+                );
+
+                if let Ok(current_ip) = IpAddr::from_str(&record.content) {
+                    if current_ip == ip {
+                        println!("Already up-to-date: {}", msg);
+                        continue;
+                    }
+                }
+
                 let payload = PatchDnsRecord {
                     comment: None,
                     content: Some(ip),
@@ -233,7 +245,7 @@ async fn main() {
                     Ok(x) => x,
                     Err(_) => {
                         handle_errors(&ErrorKind::Api);
-                        exit(1);
+                        exit(113);
                     }
                 };
 
@@ -243,15 +255,12 @@ async fn main() {
                         handle_errors(&e);
                         match e {
                             ErrorKind::NoSuccessHttp | ErrorKind::NoSuccessJson => continue,
-                            _ => exit(1),
+                            _ => exit(114),
                         }
                     }
                 };
 
-                println!(
-                    "Successfully updated IP of \"{}\" record \"{}\" in zone \"{}\" to \"{}\"",
-                    record.type_, record.name, zone.name, ip
-                );
+                println!("Successfully updated: {}", msg);
             }
         }
     }
