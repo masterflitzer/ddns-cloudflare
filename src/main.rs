@@ -13,7 +13,7 @@ use ip::determine_ip;
 use reqwest::{Client as HttpClient, Response, Url};
 use serde::de::DeserializeOwned;
 use serde_json::Value as Json;
-use std::{net::IpAddr, process::exit};
+use std::{net::IpAddr, process::exit, str::FromStr};
 use structs::{
     cloudflare::request::PatchDnsRecord,
     cloudflare::response::{ListDnsRecords, ListZone},
@@ -162,12 +162,12 @@ async fn main() {
                 }
             };
 
-        let record_array = match config.records.get(config_zone) {
+        let config_records = match config.records.get(config_zone) {
             Some(x) => x,
             None => continue,
         };
 
-        for config_record in record_array {
+        for config_record in config_records {
             let record_name = match config_record == "@" {
                 true => config_zone.to_owned(),
                 false => format!("{}.{}", config_record, config_zone),
@@ -213,6 +213,18 @@ async fn main() {
                     }
                 };
 
+                let msg = format!(
+                    "\"{}\" Record \"{}\" in zone \"{}\" with IP address \"{}\"",
+                    record.type_, record.name, zone.name, ip
+                );
+
+                if let Ok(current_ip) = IpAddr::from_str(&record.content) {
+                    if current_ip == ip {
+                        println!("Already up-to-date: {}", msg);
+                        continue;
+                    }
+                }
+
                 let payload = PatchDnsRecord {
                     comment: None,
                     content: Some(ip),
@@ -248,10 +260,7 @@ async fn main() {
                     }
                 };
 
-                println!(
-                    "Successfully updated IP of \"{}\" record \"{}\" in zone \"{}\" to \"{}\"",
-                    record.type_, record.name, zone.name, ip
-                );
+                println!("Successfully updated: {}", msg);
             }
         }
     }
