@@ -4,7 +4,7 @@ version = "0.6.0"
 edition = "2021"
 
 [dependencies]
-clap = { version = "4.5.27", features = ["derive"] }
+clap = { version = "4.5.31", features = ["derive"] }
 directories = "6.0.0"
 local-ip-address = "0.6.3"
 mac_address = "1.1.7"
