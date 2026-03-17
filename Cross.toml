@@ -1,0 +1,27 @@
+# fix for outdated cross images
+[target.aarch64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
+pre-build = [
+  "apt-get update && apt-get -qq dist-upgrade && apt-get -qq install gcc-10 g++-10",
+  "ln -fs /usr/bin/gcc-10 /usr/bin/gcc",
+  "ln -fs /usr/bin/g++-10 /usr/bin/g++",
+]
+
+[target.x86_64-pc-windows-gnu]
+image = "ghcr.io/cross-rs/x86_64-pc-windows-gnu:main"
+
+[target.x86_64-unknown-freebsd]
+image = "ghcr.io/cross-rs/x86_64-unknown-freebsd:main"
+pre-build = [
+  "apt-get update && apt-get -qq dist-upgrade && apt-get -qq install gcc-10 g++-10",
+  "ln -fs /usr/bin/gcc-10 /usr/bin/gcc",
+  "ln -fs /usr/bin/g++-10 /usr/bin/g++",
+]
+
+[target.x86_64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main"
+pre-build = [
+  "apt-get update && apt-get -qq dist-upgrade && apt-get -qq install gcc-10 g++-10",
+  "ln -fs /usr/bin/gcc-10 /usr/bin/gcc",
+  "ln -fs /usr/bin/g++-10 /usr/bin/g++",
+]
