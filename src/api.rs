@@ -1,4 +1,4 @@
-use reqwest::{header, Client as HttpClient, Response, Url};
+use reqwest::{Client as HttpClient, Response, Url, header};
 use serde::Serialize;
 
 pub(crate) async fn api_get(
