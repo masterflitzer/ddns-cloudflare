@@ -8,17 +8,17 @@ pub(crate) mod structs;
 
 use api::{api_get, api_patch};
 use clap::Parser;
-use errors::{handle_errors, ErrorKind};
+use errors::{ErrorKind, handle_errors};
 use ip::determine_ip;
 use reqwest::{Client as HttpClient, Response, Url};
 use serde::de::DeserializeOwned;
 use serde_json::Value as Json;
 use std::{net::IpAddr, process::exit, str::FromStr};
 use structs::{
+    args::Args,
+    cloudflare::Cloudflare,
     cloudflare::request::PatchDnsRecord,
     cloudflare::response::{ListDnsRecords, ListZone},
-    cloudflare::Cloudflare,
-    Args,
 };
 
 const VERSION: Option<&str> = option_env!("CARGO_PKG_VERSION");
@@ -218,11 +218,9 @@ async fn main() {
                     record.type_, record.name, zone.name, ip
                 );
 
-                if let Ok(current_ip) = IpAddr::from_str(&record.content) {
-                    if current_ip == ip {
-                        println!("Already up-to-date: {}", msg);
-                        continue;
-                    }
+                if Ok(ip) == IpAddr::from_str(&record.content) {
+                    println!("Already up-to-date: {}", msg);
+                    continue;
                 }
 
                 let payload = PatchDnsRecord {
