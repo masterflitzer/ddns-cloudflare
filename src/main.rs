@@ -119,7 +119,7 @@ async fn main() {
             None => {
                 println!(
                     "Skipping \"{}\" because the corresponding zone could not be found",
-                    &config_zone
+                    config_zone
                 );
                 continue;
             }
@@ -178,7 +178,7 @@ async fn main() {
             if records.is_empty() {
                 println!(
                     "Skipping \"{}\" because the corresponding records could not be found",
-                    &config_record
+                    config_record
                 );
                 continue;
             }
