@@ -73,43 +73,33 @@ jobs:
         run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: cross compile
-        run: cross build -r --target ${{ matrix.target }} --message-format=json | tee /tmp/.tmp
+        run: |
+          set -o errexit -o nounset -o pipefail
+
+          cross build -r --locked --target ${{ matrix.target }} --message-format json-render-diagnostics > /tmp/cargo-build-output.json
+
+          bin="$(jq -r 'select(.reason == "compiler-artifact") | select(.target.kind[]? == "bin") | select(.executable != null) | .executable' /tmp/cargo-build-output.json | tail -n 1)"
+
+          test -n "${bin}"
+          echo "bin=${bin}" >> "${GITHUB_ENV}"
 
       - name: release
         env:
-          GITHUB_API_VER: "2022-11-28"
-          GITHUB_TOKEN: ${{ secrets.PAT }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
-          TARGET: ${{ matrix.target }}
+          GH_TOKEN: ${{ github.token }}
+          release_commit: ${{ github.sha }}
+          release_tag: ${{ github.ref_name }}
+          target: ${{ matrix.target }}
         run: |
-          FILE="$(echo "${GITHUB_WORKSPACE}/$(cat /tmp/.tmp | tail -n 2 | head -n 1 | jq -r '.executable')" | tr -s '/')"
-          FILE_NAME="$(echo "${FILE}" | tr '/' '\n' | tail -n 1)"
-          OS="$(echo "${TARGET}" | tr '-' '\n' | head -n 3 | tail -n 1)"
-          ARCH="$(echo "${TARGET}" | tr '-' '\n' | head -n 1)"
-          ASSET_NAME="${OS}-${ARCH}-${FILE_NAME}"
+          set -o errexit -o nounset -o pipefail
 
-          CODE="$(curl -Lso /tmp/.tmp -w "%{response_code}" -X GET -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: ${GITHUB_API_VER}" "https://api.github.com/repos/${REPO}/releases/tags/${TAG}")"
+          bin="${bin:?}"
+          bin_name="$(basename "${bin}")"
+          os="$(cut -d '-' -f 3 <<< "${target}")"
+          arch="$(cut -d '-' -f 1 <<< "${target}")"
+          asset_name="${os}-${arch}-${bin_name}"
 
-          if test "${CODE}" -ne 200
-          then
-            echo "::notice::Could not find a release for tag ${TAG} (Status Code: ${CODE})"
+          gh release create "${release_tag}" -t "${release_tag}" -n "Release: ${release_tag}" --target "${release_commit}" --verify-tag \
+          || gh release view "${release_tag}" > /dev/null
 
-            CODE="$(curl -Lso /tmp/.tmp -w "%{response_code}" -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: ${GITHUB_API_VER}" "https://api.github.com/repos/${REPO}/releases" -d "{ \"tag_name\": \"${TAG}\", \"name\": \"${TAG}\", \"body\": \"Release: ${TAG}\", \"draft\": false, \"prerelease\": false, \"generate_release_notes\": false }")"
-
-            if test "${CODE}" -ne 201
-            then
-              echo "::error::Could not create a new release for tag ${TAG} (Status Code: ${CODE})"
-              exit 1
-            fi
-          fi
-
-          RELEASE_ID="$(cat /tmp/.tmp | jq -r '.id')"
-
-          CODE="$(curl -Lso /tmp/.tmp -w "%{response_code}" -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: ${GITHUB_API_VER}" -H "Content-Type: application/octet-stream" "https://uploads.github.com/repos/${REPO}/releases/${RELEASE_ID}/assets?name=${ASSET_NAME}" --data-binary "@${FILE}")"
-
-          if test "${CODE}" -ne 201
-          then
-            echo "::error::Could not upload asset for release ${TAG} (Status Code: ${CODE})"
-            exit 1
-          fi
+          chmod 0755 "${bin}"
+          gh release upload "${release_tag}" "${bin}#${asset_name}"
