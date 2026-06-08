@@ -1,6 +1,6 @@
 # DDNS Cloudflare
 
-[![CI/CD](https://github.com/masterflitzer/ddns-cloudflare/actions/workflows/main.yml/badge.svg)](https://github.com/masterflitzer/ddns-cloudflare/actions/workflows/main.yml)
+[![CI/CD](https://github.com/masterflitzer/ddns-cloudflare/actions/workflows/main.yaml/badge.svg)](https://github.com/masterflitzer/ddns-cloudflare/actions/workflows/main.yaml)
 
 ## Setup
 
@@ -27,7 +27,7 @@ vim /etc/cron.d/ddns-cloudflare
 $asset = "windows-x86_64-ddns_cloudflare.exe"; $bin = "$env:LOCALAPPDATA/Programs/ddns-cloudflare/ddns-cloudflare.exe"; curl.exe -Lso "${bin}.new" "https://github.com/masterflitzer/ddns-cloudflare/releases/latest/download/${asset}" && mv -force "${bin}.new" "${bin}"
 ```
 
-- Use **Task Scheduler** as an replacement for **cron** on Windows
+- Use **Task Scheduler** as a replacement for **cron** on Windows
 
 ## Configuration
 

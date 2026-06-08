@@ -1,4 +1,4 @@
-name: ci/cd
+name: CI/CD
 
 on:
   push:
@@ -73,14 +73,26 @@ jobs:
         run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: cross compile
+        env:
+          target: ${{ matrix.target }}
         run: |
           set -o errexit -o nounset -o pipefail
 
-          cross build -r --locked --target ${{ matrix.target }} --message-format json-render-diagnostics > /tmp/cargo-build-output.json
+          os="$(cut -d - -f 3 <<< "${target}")"
+          arch="$(cut -d - -f 1 <<< "${target}")"
 
-          bin="$(jq -r 'select(.reason == "compiler-artifact") | select(.target.kind[]? == "bin") | select(.executable != null) | .executable' /tmp/cargo-build-output.json | tail -n 1)"
+          cross build -r --locked --target "${target}" --message-format json-render-diagnostics > /tmp/cargo-build-output.json
 
-          test -n "${bin}"
+          jq -r 'select(.executable != null) | .executable' /tmp/cargo-build-output.json > /tmp/cargo-bin.txt
+
+          bin="$(tail -n 1 /tmp/cargo-bin.txt)"
+          bin="$(realpath "${bin#/}")"
+          name="${os}-${arch}-$(basename "${bin}")"
+          mv "${bin}" "/tmp/${name}"
+          bin="/tmp/${name}"
+
+          test -f "${bin}"
+          chmod 0755 "${bin}"
           echo "bin=${bin}" >> "${GITHUB_ENV}"
 
       - name: release
@@ -88,18 +100,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           release_commit: ${{ github.sha }}
           release_tag: ${{ github.ref_name }}
-          target: ${{ matrix.target }}
         run: |
           set -o errexit -o nounset -o pipefail
-
-          bin="${bin:?}"
-          bin_name="$(basename "${bin}")"
-          os="$(cut -d '-' -f 3 <<< "${target}")"
-          arch="$(cut -d '-' -f 1 <<< "${target}")"
-          asset_name="${os}-${arch}-${bin_name}"
 
           gh release create "${release_tag}" -t "${release_tag}" -n "Release: ${release_tag}" --target "${release_commit}" --verify-tag \
           || gh release view "${release_tag}" > /dev/null
 
-          chmod 0755 "${bin}"
-          gh release upload "${release_tag}" "${bin}#${asset_name}"
+          gh release upload "${release_tag}" "${bin}"
